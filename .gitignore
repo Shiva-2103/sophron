@@ -41,3 +41,6 @@ kubeconfig*
 # Editors / OS
 .vscode/
 .DS_Store
+
+# Sophron lab local state (passwords, port-forward pids)
+.lab/

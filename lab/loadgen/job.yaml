@@ -1,0 +1,47 @@
+# Load generator: 4 workers in parallel, each sending REQUESTS chat requests.
+# Makes the model's metrics move so we can see them in Prometheus and Grafana.
+#
+# Run:   make lab-load            (or: make lab-load REQUESTS=100)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loadgen
+  namespace: llm
+spec:
+  parallelism: 4
+  completions: 4
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        sophron.dev/role: system
+      containers:
+        - name: loadgen
+          image: curlimages/curl:latest
+          env:
+            - name: REQUESTS
+              value: "25"
+            - name: URL
+              value: http://llm-server.llm.svc:8080/v1/chat/completions
+          command: ["sh", "-c"]
+          args:
+            - |
+              i=1
+              ok=0
+              while [ "$i" -le "$REQUESTS" ]; do
+                case $((i % 4)) in
+                  0) q="Explain Kubernetes pods in two sentences." ;;
+                  1) q="Write a haiku about GPUs." ;;
+                  2) q="What is a KV cache in an LLM server? Keep it short." ;;
+                  3) q="List three ways to reduce cloud costs." ;;
+                esac
+                body=$(printf '{"model":"qwen2.5-1.5b-instruct","max_tokens":128,"messages":[{"role":"user","content":"%s"}]}' "$q")
+                if curl -fsS -m 120 -H 'Content-Type: application/json' -d "$body" "$URL" -o /dev/null; then
+                  ok=$((ok + 1))
+                fi
+                echo "request $i done"
+                i=$((i + 1))
+              done
+              echo "finished: $ok of $REQUESTS succeeded"

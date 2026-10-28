@@ -1,0 +1,16 @@
+# The Sophron lab cluster: 1 control plane + 2 workers, all as Docker containers.
+#
+# worker 1 is labelled as the "LLM node": the model server runs there,
+# like a GPU node pool in a real cluster.
+# worker 2 runs everything else (Prometheus, Grafana, load generator).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: sophron-lab
+nodes:
+  - role: control-plane
+  - role: worker
+    labels:
+      sophron.dev/role: llm
+  - role: worker
+    labels:
+      sophron.dev/role: system

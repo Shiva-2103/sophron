@@ -1,0 +1,45 @@
+# kube-prometheus-stack settings for the lab.
+# Chart: prometheus-community/kube-prometheus-stack
+
+# Pick up every ServiceMonitor/PodMonitor in the cluster, not only ones
+# labelled for this Helm release. Our model server's ServiceMonitor relies on this.
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 2d
+    scrapeInterval: 15s
+    nodeSelector:
+      sophron.dev/role: system
+    resources:
+      requests: { cpu: 200m, memory: 1Gi }
+      limits: { memory: 3Gi }
+
+grafana:
+  # Password comes from the Makefile (GRAFANA_PASSWORD), never hard-coded here.
+  nodeSelector:
+    sophron.dev/role: system
+  defaultDashboardsEnabled: true
+
+# Not needed in a lab; saves memory.
+alertmanager:
+  enabled: false
+
+# In kind these components listen only on 127.0.0.1 inside the control-plane
+# container, so Prometheus can't reach them and would show false "down" alerts.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheusOperator:
+  nodeSelector:
+    sophron.dev/role: system
+kube-state-metrics:
+  nodeSelector:
+    sophron.dev/role: system
