@@ -9,7 +9,7 @@ REQUESTS     ?= 25
 MON_NS       := monitoring
 MON_RELEASE  := monitoring
 
-.PHONY: help lab-tools lab-up lab-down lab-status lab-load lab-check lab-ports lab-ports-stop lab-grafana-password
+.PHONY: help lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-ports lab-ports-stop lab-grafana-password
 
 help: ## List available commands
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
@@ -54,9 +54,16 @@ lab-status: ## Show nodes and the main pods
 lab-load: ## Send test requests to the model (REQUESTS=25 per worker, 4 workers)
 	-kubectl -n llm delete job loadgen --ignore-not-found
 	sed 's/value: "25"/value: "$(REQUESTS)"/' $(LAB_DIR)/loadgen/job.yaml | kubectl apply -f -
-	@echo "==> Following logs (Ctrl+C stops watching, not the load)"
-	kubectl -n llm wait --for=condition=Ready pod -l job-name=loadgen --timeout=120s || true
-	kubectl -n llm logs -f -l job-name=loadgen --max-log-requests 4 --prefix
+	@echo "==> Following logs (Ctrl+C stops watching, the load keeps running)"
+	@kubectl -n llm wait --for=condition=Ready pod -l job-name=loadgen --timeout=120s >/dev/null || true
+	@kubectl -n llm logs -f -l job-name=loadgen --max-log-requests 4 --prefix || true
+	@echo
+	@echo "==> Summary (rerun anytime: make lab-load-summary)"
+	@$(MAKE) --no-print-directory lab-load-summary
+
+lab-load-summary: ## Show how many load requests succeeded
+	@kubectl -n llm get job loadgen -o jsonpath='{.status.succeeded}{" of 4 workers finished"}{"\n"}' 2>/dev/null || echo "No load job found"
+	@kubectl -n llm logs -l job-name=loadgen --prefix 2>/dev/null | grep finished || true
 
 lab-check: ## Verify the Phase 1 "done when" list
 	bash $(LAB_DIR)/scripts/check.sh
