@@ -40,6 +40,12 @@ metadata:
     app.kubernetes.io/name: llm-server
 spec:
   replicas: 1
+  # Recreate: stop the old pod before starting the new one.
+  # A rolling update would run both at once, and two model servers
+  # don't fit on one node (each reserves 4 CPUs), so the new pod would
+  # stay Pending forever. Same reason GPU model servers often use Recreate.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: llm-server

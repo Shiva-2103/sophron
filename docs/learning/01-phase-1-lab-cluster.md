@@ -69,6 +69,29 @@ A small resource that tells the Prometheus Operator what to scrape. No Prometheu
 
 In kind, etcd, scheduler and controller-manager listen only inside the control-plane container. Prometheus can't reach them and would show false "down" alerts. We turned those scrapes off.
 
+## What went wrong, and what we learned
+
+### "I changed it" is not "it's running"
+
+We changed `--threads` from 6 to 7 and applied it, but Grafana still showed the old pod. The new pod was stuck `Pending`.
+
+| Step | What happened |
+|---|---|
+| Rolling update (the default) | Starts the new pod before stopping the old one |
+| Old pod | Already reserved 4 of the node's 8 CPUs |
+| New pod | Asked for 4 more, so it didn't fit |
+| Result | New pod `Pending` forever, old pod kept serving |
+
+Fix: `strategy: Recreate`. Stop the old pod, then start the new one. A few seconds of downtime, but it always fits. GPU model servers often use it for the same reason: there's rarely a spare GPU for two copies.
+
+How to spot it: `kubectl get pods` shows two pods with different hashes, one `Pending`. `kubectl describe pod` ends with `Insufficient cpu`.
+
+Sophron lesson: the Phase 6 operator must check that a fix actually rolled out, not only that it was applied.
+
+### One metric can mislead
+
+CPU sat flat at about 6 cores, which looked like the CPU limit was the bottleneck. The throttling metric said only 3 to 6% of time was throttled. The real cap was `--threads 6`. Sophron's rules must check several signals before suggesting a fix.
+
 ## Metrics we'll use later
 
 | Metric | Means |
@@ -92,4 +115,6 @@ Run `curl localhost:8080/metrics` (after `make lab-ports`) to see the full list.
 - Startup vs readiness vs liveness probes?
 - How does Prometheus find what to scrape in Kubernetes?
 - Why does a longer context window need more memory?
-- How would you expose a cluster UI safely? (SSH tunnel or port-forward, never an open port)
+- How would you expose a cluster UI safely? (SSH tunnel, or a port opened only to your IP)
+- Rolling update vs Recreate: when does each fit?
+- A new pod is stuck Pending. How do you debug it?
