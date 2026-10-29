@@ -17,6 +17,8 @@ import (
 var defaultYAML []byte
 
 // Metric names a mapping may use. Each becomes a column in the snapshot store.
+//
+//nolint:gosec // G101: metric names, not credentials ("Tokens" trips the check)
 const (
 	GenerationTokensPerSecond = "generation_tokens_per_second"
 	PromptTokensPerSecond     = "prompt_tokens_per_second"
@@ -63,7 +65,7 @@ func Load(path string) (*Mapping, error) {
 	if path == "" {
 		return Default()
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: the operator chooses this file on purpose
 	if err != nil {
 		return nil, fmt.Errorf("read mapping file: %w", err)
 	}

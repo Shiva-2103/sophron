@@ -139,7 +139,7 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1) // SQLite allows one writer; keep it simple
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
 	}
 	return &Store{db: db}, nil
@@ -155,6 +155,7 @@ func (s *Store) Save(ctx context.Context, snaps []collector.Snapshot) error {
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+	//nolint:gosec // G201: only the constant column list is formatted in; values use placeholders
 	q := fmt.Sprintf("INSERT INTO snapshots (%s) VALUES (%s)",
 		strings.Join(columns, ", "), strings.TrimSuffix(strings.Repeat("?, ", len(columns)), ", "))
 	stmt, err := tx.PrepareContext(ctx, q)
@@ -173,6 +174,7 @@ func (s *Store) Save(ctx context.Context, snaps []collector.Snapshot) error {
 // Latest returns the newest snapshot of every pod seen within maxAge.
 func (s *Store) Latest(ctx context.Context, maxAge time.Duration) ([]collector.Snapshot, error) {
 	since := time.Now().Add(-maxAge).UnixMilli()
+	//nolint:gosec // G201: only the constant column list is formatted in; values use placeholders
 	q := fmt.Sprintf(`SELECT %s FROM snapshots s
 		WHERE time = (SELECT MAX(time) FROM snapshots t WHERE t.namespace = s.namespace AND t.pod = s.pod)
 		AND time >= ? ORDER BY namespace, pod`, strings.Join(columns, ", "))
@@ -181,6 +183,7 @@ func (s *Store) Latest(ctx context.Context, maxAge time.Duration) ([]collector.S
 
 // History returns snapshots of one pod since a time, oldest first.
 func (s *Store) History(ctx context.Context, namespace, pod string, since time.Time) ([]collector.Snapshot, error) {
+	//nolint:gosec // G201: only the constant column list is formatted in; values use placeholders
 	q := fmt.Sprintf(`SELECT %s FROM snapshots WHERE namespace = ? AND pod = ? AND time >= ? ORDER BY time`,
 		strings.Join(columns, ", "))
 	return s.query(ctx, q, namespace, pod, since.UnixMilli())
