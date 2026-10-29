@@ -16,6 +16,8 @@ servers:
       prompt_tokens_per_second: sum by (namespace, pod) (rate(llamacpp:prompt_tokens_total[2m]))
       requests_running: sum by (namespace, pod) (llamacpp:requests_processing)
       requests_waiting: sum by (namespace, pod) (llamacpp:requests_deferred)
+      # Only older llama.cpp versions export this; newer ones have no KV cache
+      # metric, so the value is simply empty (null), never a misleading 0.
       kv_cache_usage_ratio: max by (namespace, pod) (llamacpp:kv_cache_usage_ratio)
 
   - name: vllm

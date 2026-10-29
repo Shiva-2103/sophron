@@ -39,7 +39,7 @@ Weeks 4 to 6. Sophron's first code.
 - [x] Labelled pods are tracked even while Pending
 - [x] Read-only RBAC, non-root, read-only filesystem
 - [x] CI runs tidy, format, vet, lint, race tests, image build and manifest checks
-- [ ] `make collector-check` passes in the lab
+- [x] `make collector-check` passes in the lab
 
 Learn: Go project layout, `client-go` informers, RBAC, PromQL from code, Docker multi-stage builds
 

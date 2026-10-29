@@ -93,6 +93,21 @@ The dependency download gets its own layer, so changing code doesn't re-download
 | Docker build | A broken image |
 | kubeconform | Invalid Kubernetes YAML |
 
+## First real snapshot
+
+From the lab, during a load test:
+
+| Field | Value | What it tells us |
+|---|---|---|
+| `pod` | `llm-server-584f6f6c7d-27cxb` | New hash: adding the Sophron label changed the pod template, so Recreate rolled it out |
+| `startupSeconds` | 6 | Fast, because the model file was already on the volume |
+| `requestsRunning` | 3 | Load was in progress (`--parallel 4` allows up to 4) |
+| `generationTokensPerSecond` | 10.1 | Low because the 2-minute rate window was mostly idle when the load started |
+| `memoryWorkingSetBytes` | 0.99 GB of a 6 GB limit | A future cost hint: the limit could be much smaller |
+| `cpuThrottledRatio` | 0.036 | 3.6% of time slices hit the CPU limit |
+| `kvCacheUsageRatio` | `null` | Newer llama.cpp has no KV cache metric. `null` means "no data", not "empty cache" |
+| `gpu*` | `null` | No GPU in the lab |
+
 ## What CI caught
 
 ### A checksum mismatch
