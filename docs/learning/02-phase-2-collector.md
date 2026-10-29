@@ -93,6 +93,32 @@ The dependency download gets its own layer, so changing code doesn't re-download
 | Docker build | A broken image |
 | kubeconform | Invalid Kubernetes YAML |
 
+## What CI caught
+
+### A checksum mismatch
+
+The first CI run failed with `SECURITY ERROR: checksum mismatch` for `github.com/go-openapi/swag/cmdutils`.
+
+| | |
+|---|---|
+| What `go.sum` is | A fingerprint of every dependency, so nobody can swap the code under you |
+| What went wrong | Our `go.sum` was built from GitHub sources. For a module in a subfolder, Go's official tools also add the repo's root `LICENSE` file. Ours didn't, so the fingerprint differed |
+| How it was caught | CI checks every fingerprint against Go's public checksum database (sum.golang.org) |
+| Fix | Rebuilt the fingerprints the official way; 14 entries changed |
+
+This is the protection working as designed. A tampered dependency fails the same way.
+
+### Linter findings
+
+| Finding | Real issue? | Action |
+|---|---|---|
+| Ignored error from `db.Close()` | Yes, small | Handled explicitly |
+| SQL built with `Sprintf` | No: only a constant column list goes in, values use `?` | `//nolint` with the reason |
+| File path from a variable | No: the operator picks the mapping file | `//nolint` with the reason |
+| "Hard-coded credentials" | No: the word "Tokens" in a metric name | `//nolint` with the reason |
+
+Rule: fix real findings, and when you silence a false positive, always write why.
+
 ## Commands
 
 | Command | Does |
@@ -119,3 +145,5 @@ The dependency download gets its own layer, so changing code doesn't re-download
 - What's in a minimal RBAC role for a read-only agent?
 - Why a two-stage Docker build? Why distroless?
 - Your agent depends on Prometheus. What happens when Prometheus is down?
+- What does `go.sum` protect against? What does a checksum mismatch mean?
+- How do you handle linter false positives?
