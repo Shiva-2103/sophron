@@ -1,0 +1,120 @@
+# Sophron collector: reads Prometheus and the Kubernetes API, saves snapshots.
+# Phase 5 turns this into a Helm chart. For now, plain manifests.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sophron-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sophron-collector
+  namespace: sophron-system
+---
+# Read-only access, and only to what the collector needs.
+# No secrets, no write verbs. Least privilege.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sophron-collector
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sophron-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sophron-collector
+subjects:
+  - kind: ServiceAccount
+    name: sophron-collector
+    namespace: sophron-system
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sophron-data
+  namespace: sophron-system
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sophron-collector
+  namespace: sophron-system
+  labels:
+    app.kubernetes.io/name: sophron-collector
+spec:
+  replicas: 1
+  # One writer for the SQLite file: stop the old pod before starting a new one.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sophron-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sophron-collector
+    spec:
+      serviceAccountName: sophron-collector
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532          # lets the non-root user write to the volume
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: collector
+          image: sophron-collector:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - --prometheus-url=http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
+            - --interval=30s
+            - --db=/data/sophron.db
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: sophron-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sophron-collector
+  namespace: sophron-system
+spec:
+  selector:
+    app.kubernetes.io/name: sophron-collector
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

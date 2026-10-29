@@ -78,6 +78,17 @@ Then browse:
 
 Try this query in Prometheus: `rate(llamacpp:tokens_predicted_total[1m])`
 
+## 7. Run the Sophron collector (Phase 2)
+
+```bash
+make collector-up        # build the image, load it into kind, deploy
+make lab-load            # create some traffic
+make collector-check     # PASS/FAIL for each Phase 2 goal
+make collector-snapshots # the latest snapshot as JSON
+```
+
+The first build downloads Go modules and takes a few minutes. Later builds reuse the cache.
+
 ## Commands
 
 | Command | Does |
@@ -88,6 +99,8 @@ Try this query in Prometheus: `rate(llamacpp:tokens_predicted_total[1m])`
 | `make lab-status` | Show nodes and pods |
 | `make lab-ports` / `lab-ports-stop` | Open or close local UI ports |
 | `make lab-down` | Delete the cluster |
+| `make collector-up` / `collector-check` | Deploy and check the collector |
+| `make collector-snapshots` / `collector-logs` | See what it collected |
 
 ## Save money
 

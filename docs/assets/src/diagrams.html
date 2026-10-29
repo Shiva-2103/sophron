@@ -158,6 +158,36 @@ h2{font-size:26px;font-weight:600;letter-spacing:-.2px}
   </div>
 </figure>
 
+<!-- 6. Collector -->
+<figure id="collector">
+  <h2>One collection cycle</h2>
+  <p class="sub">Every 30 seconds, the collector turns raw numbers into one snapshot per model pod.</p>
+  <div class="row">
+    <div style="flex:1"></div><div class="arrow"></div>
+    <div class="box exist" style="flex:1"><div class="t">Prometheus</div><div class="d">Tokens, CPU, memory, GPU</div></div>
+    <div class="arrow"></div>
+    <div class="box exist" style="flex:1"><div class="t">Kubernetes API</div><div class="d">Pods, nodes, warning events</div></div>
+    <div class="arrow"></div><div style="flex:1"></div>
+  </div>
+  <div class="row">
+    <div style="flex:1"></div><div class="arrow"></div>
+    <div style="flex:1" class="varrow"><svg viewBox="0 0 16 28"><path d="M8 0v24M2 18l6 7 6-7" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="arrow"></div>
+    <div style="flex:1" class="varrow"><svg viewBox="0 0 16 28"><path d="M8 0v24M2 18l6 7 6-7" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="arrow"></div><div style="flex:1"></div>
+  </div>
+  <div class="row">
+    <div class="box sophron" style="flex:1"><div class="num">1</div><div class="t">Find model pods</div><div class="d">By their metrics, or by a label</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="num">2</div><div class="t">Query</div><div class="d">17 queries for the whole cluster</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="num">3</div><div class="t">Join</div><div class="d">Add pod, node and event facts</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="num">4</div><div class="t">Save</div><div class="d">One row per pod in SQLite</div></div>
+  </div>
+  <div class="row" style="margin-top:22px;gap:12px">
+    <div class="box" style="flex:1"><div class="t">Example snapshot</div><div class="d" style="font-family:monospace;font-size:13px;line-height:1.6">llm/llm-server-65795b757c-x2bws &nbsp;·&nbsp; llamacpp &nbsp;·&nbsp; Running, ready<br>node sophron-lab-worker (kind, 8 cores)<br>48.1 tokens/s &nbsp;·&nbsp; 5.85 CPU cores &nbsp;·&nbsp; 4% throttled &nbsp;·&nbsp; started in 60 s</div></div>
+  </div>
+</figure>
+
 <script>
 const phases=[
  [0,'Repo and plan',1,1],[1,'Lab cluster',2,3],[2,'Collector',4,6],[3,'Rules engine',7,9],

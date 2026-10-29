@@ -44,3 +44,7 @@ kubeconfig*
 
 # Sophron lab local state (passwords, port-forward pids)
 .lab/
+
+# Go build output
+/bin/
+coverage.out

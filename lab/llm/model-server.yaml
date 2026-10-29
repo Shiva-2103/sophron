@@ -53,6 +53,9 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: llm-server
+        # Tells Sophron this pod is a llama.cpp model server, so it is
+        # tracked even before it exposes metrics (for example while Pending).
+        sophron.dev/model-server: llamacpp
     spec:
       nodeSelector:
         sophron.dev/role: llm

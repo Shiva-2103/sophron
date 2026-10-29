@@ -1,0 +1,46 @@
+# Which Prometheus queries Sophron runs, and what each result means.
+#
+# Every query must return one value per pod, with "namespace" and "pod" labels.
+# That is why each one ends with "by (namespace, pod)".
+# A query that returns nothing (for example GPU metrics on a CPU cluster) is fine:
+# the value is simply left empty in the snapshot.
+#
+# Add a new model server by adding an entry under "servers".
+
+# Model servers. A pod belongs to the first server whose "detect" metric it exposes.
+servers:
+  - name: llamacpp
+    detect: llamacpp:tokens_predicted_total
+    queries:
+      generation_tokens_per_second: sum by (namespace, pod) (rate(llamacpp:tokens_predicted_total[2m]))
+      prompt_tokens_per_second: sum by (namespace, pod) (rate(llamacpp:prompt_tokens_total[2m]))
+      requests_running: sum by (namespace, pod) (llamacpp:requests_processing)
+      requests_waiting: sum by (namespace, pod) (llamacpp:requests_deferred)
+      kv_cache_usage_ratio: max by (namespace, pod) (llamacpp:kv_cache_usage_ratio)
+
+  - name: vllm
+    detect: vllm:generation_tokens_total
+    queries:
+      generation_tokens_per_second: sum by (namespace, pod) (rate(vllm:generation_tokens_total[2m]))
+      prompt_tokens_per_second: sum by (namespace, pod) (rate(vllm:prompt_tokens_total[2m]))
+      requests_running: sum by (namespace, pod) (vllm:num_requests_running)
+      requests_waiting: sum by (namespace, pod) (vllm:num_requests_waiting)
+      # Newer vLLM versions renamed gpu_cache_usage_perc to kv_cache_usage_perc.
+      kv_cache_usage_ratio: max by (namespace, pod) (vllm:kv_cache_usage_perc or vllm:gpu_cache_usage_perc)
+
+# Container and GPU metrics that work for any model server.
+common:
+  # From the kubelet (cAdvisor).
+  cpu_cores: sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{container!="", container!="POD"}[2m]))
+  cpu_throttled_ratio: >-
+    sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total{container!=""}[2m]))
+    / sum by (namespace, pod) (rate(container_cpu_cfs_periods_total{container!=""}[2m]))
+  memory_working_set_bytes: sum by (namespace, pod) (container_memory_working_set_bytes{container!="", container!="POD"})
+  # From NVIDIA's DCGM exporter. Depending on its settings, the pod is in
+  # "pod" or "exported_pod", so we copy exported_* into the normal labels.
+  gpu_utilization_ratio: >-
+    avg by (namespace, pod) (label_replace(label_replace(DCGM_FI_DEV_GPU_UTIL,
+    "namespace", "$1", "exported_namespace", "(.+)"), "pod", "$1", "exported_pod", "(.+)")) / 100
+  gpu_memory_used_bytes: >-
+    sum by (namespace, pod) (label_replace(label_replace(DCGM_FI_DEV_FB_USED,
+    "namespace", "$1", "exported_namespace", "(.+)"), "pod", "$1", "exported_pod", "(.+)")) * 1024 * 1024

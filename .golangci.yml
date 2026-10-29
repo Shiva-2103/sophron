@@ -1,0 +1,28 @@
+version: "2"
+
+linters:
+  default: standard        # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose            # HTTP response bodies are closed
+    - errorlint            # errors are wrapped and compared correctly
+    - gosec                # common security mistakes
+    - misspell
+    - nilerr
+    - revive
+    - unconvert
+  settings:
+    gosec:
+      excludes:
+        - G204             # we run no subprocesses with user input
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, errcheck]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

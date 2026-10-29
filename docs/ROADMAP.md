@@ -24,9 +24,9 @@ Learn: open-source repo setup, working with pull requests
 
 Weeks 2 to 3. A laptop cluster serving a small model.
 
-- [ ] `make lab-up` starts a kind cluster in one command
-- [ ] A small model answers `curl` requests
-- [ ] Prometheus shows tokens per second, latency and queue size
+- [x] `make lab-up` starts a kind cluster in one command
+- [x] A small model answers `curl` requests
+- [x] Prometheus shows tokens per second and CPU use
 
 Learn: how vLLM serves models, KV cache, Prometheus and PromQL
 
@@ -34,11 +34,14 @@ Learn: how vLLM serves models, KV cache, Prometheus and PromQL
 
 Weeks 4 to 6. Sophron's first code.
 
-- [ ] Collector runs as a pod in the lab
-- [ ] Snapshots appear in SQLite
-- [ ] CI runs lint, tests and image build on every PR
+- [x] Collector runs as a pod in the lab (`make collector-up`)
+- [x] Snapshots join Prometheus metrics with pod, node and event facts
+- [x] Labelled pods are tracked even while Pending
+- [x] Read-only RBAC, non-root, read-only filesystem
+- [x] CI runs tidy, format, vet, lint, race tests, image build and manifest checks
+- [ ] `make collector-check` passes in the lab
 
-Learn: Go project layout, `client-go`, RBAC, Dockerfiles
+Learn: Go project layout, `client-go` informers, RBAC, PromQL from code, Docker multi-stage builds
 
 ## Phase 3: Rules engine
 
