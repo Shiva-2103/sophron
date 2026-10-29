@@ -10,7 +10,7 @@ MON_NS       := monitoring
 MON_RELEASE  := monitoring
 IMAGE        ?= sophron-collector:dev
 
-.PHONY: help build test lint collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-ports lab-ports-stop lab-grafana-password
+.PHONY: help build test lint collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana-password
 
 help: ## List available commands
 	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -96,12 +96,16 @@ lab-load: ## Send test requests to the model (REQUESTS=25 per worker, 4 workers)
 	@kubectl -n llm wait --for=condition=Ready pod -l job-name=loadgen --timeout=120s >/dev/null || true
 	@kubectl -n llm logs -f -l job-name=loadgen --max-log-requests 4 --prefix || true
 	@echo
+	@kubectl -n llm wait --for=condition=complete job/loadgen --timeout=60s >/dev/null 2>&1 || true
 	@echo "==> Summary (rerun anytime: make lab-load-summary)"
 	@$(MAKE) --no-print-directory lab-load-summary
 
 lab-load-summary: ## Show how many load requests succeeded
 	@kubectl -n llm get job loadgen -o jsonpath='{.status.succeeded}{" of 4 workers finished"}{"\n"}' 2>/dev/null || echo "No load job found"
 	@kubectl -n llm logs -l job-name=loadgen --prefix 2>/dev/null | grep finished || true
+
+lab-bench: ## Benchmark the model the same way every time (REQUESTS=25 per worker)
+	@bash $(LAB_DIR)/scripts/bench.sh $(REQUESTS)
 
 lab-check: ## Verify the Phase 1 "done when" list
 	bash $(LAB_DIR)/scripts/check.sh
