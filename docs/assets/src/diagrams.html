@@ -1,0 +1,180 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+:root{
+  --ink:#172033; --muted:#55657d; --line:#c5d0dd; --bg:#f4f7fb;
+  --teal:#0e7c7b; --teal-tint:#ddf1ef; --teal-ink:#08504f;
+  --slate:#e6ecf3; --slate-ink:#2c3a50;
+  --amber:#b7791f; --amber-tint:#fcf0da; --amber-ink:#6b4410;
+}
+*{box-sizing:border-box;margin:0}
+body{font-family:Poppins,sans-serif;color:var(--ink);background:#fff;padding:20px}
+figure{width:980px;background:var(--bg);border-radius:22px;padding:40px 44px;margin-bottom:30px}
+h2{font-size:26px;font-weight:600;letter-spacing:-.2px}
+.sub{font-size:16px;color:var(--muted);margin-top:4px;margin-bottom:28px}
+.box{border-radius:14px;padding:16px 18px;background:#fff;border:1.5px solid var(--line)}
+.t{font-size:17px;font-weight:600;line-height:1.3}
+.d{font-size:14px;color:var(--muted);margin-top:4px;line-height:1.45}
+.sophron{background:var(--teal-tint);border-color:var(--teal)}
+.sophron .t{color:var(--teal-ink)}
+.exist{background:var(--slate);border-color:#b8c4d3}
+.human{background:var(--amber-tint);border-color:var(--amber)}
+.human .t{color:var(--amber-ink)}
+.dash{border-style:dashed}
+.row{display:flex;align-items:stretch;gap:0}
+.arrow{display:flex;align-items:center;justify-content:center;width:40px;flex:none}
+.sophron .arrow{width:30px}
+.arrow svg{width:28px;height:16px}
+.varrow{display:flex;justify-content:center;height:40px;align-items:center}
+.varrow svg{width:16px;height:28px}
+.num{display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--teal);color:#fff;font-size:14px;font-weight:600;align-items:center;justify-content:center;margin-bottom:10px}
+.num.amber{background:var(--amber)}
+.chip{display:inline-block;background:#fff;border:1.5px solid #b8c4d3;border-radius:999px;padding:6px 14px;font-size:15px;font-weight:500;margin:0 6px}
+.legend{display:flex;gap:22px;margin-top:26px;font-size:14px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.sw{width:16px;height:16px;border-radius:5px;border:1.5px solid}
+</style></head><body>
+
+<!-- 1. Overview -->
+<figure id="overview">
+  <h2>How Sophron works</h2>
+  <p class="sub">It reads, thinks, shows, and acts only after you say yes.</p>
+  <div class="box exist" style="text-align:center;padding:18px">
+    <div class="t" style="margin-bottom:12px">Your Kubernetes cluster</div>
+    <span class="chip">Model servers (vLLM, KServe)</span><span class="chip">Prometheus + GPU metrics</span><span class="chip">Kubernetes API</span>
+  </div>
+  <div class="row" style="margin-top:0">
+    <div style="flex:1" class="varrow"><svg viewBox="0 0 16 28"><path d="M8 0v24M2 18l6 7 6-7" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div style="flex:3"></div>
+    <div style="flex:1" class="varrow"><svg viewBox="0 0 16 28"><path d="M8 28V4M2 10l6-7 6 7" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  </div>
+  <div class="row">
+    <div class="box sophron" style="flex:1"><div class="num">1</div><div class="t">Read</div><div class="d">The collector gathers metrics and events every 30 seconds</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="num">2</div><div class="t">Think</div><div class="d">Rules find failures. The cost engine finds waste.</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="num">3</div><div class="t">Show</div><div class="d">Dashboard and Slack explain it in plain words</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="num">4</div><div class="t">Act</div><div class="d">The operator applies the approved fix</div></div>
+  </div>
+  <div class="row">
+    <div style="flex:3.6"></div>
+    <div style="flex:1" class="varrow"><svg viewBox="0 0 16 28"><path d="M8 28V4M2 10l6-7 6 7" stroke="#b7791f" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  </div>
+  <div class="row"><div style="flex:3.6"></div>
+    <div class="box human" style="flex:1.25"><div class="t">You approve first</div><div class="d">In the dashboard or Slack</div></div>
+  </div>
+</figure>
+
+<!-- 2. Architecture -->
+<figure id="architecture">
+  <h2>Inside Sophron</h2>
+  <p class="sub">Everything runs in your cluster as one Helm chart. No data leaves.</p>
+  <div class="row">
+    <div style="width:190px;flex:none;display:flex;flex-direction:column;gap:12px">
+      <div class="box exist"><div class="t">Model servers</div><div class="d">vLLM, KServe</div></div>
+      <div class="box exist"><div class="t">Prometheus</div><div class="d">GPU and model metrics</div></div>
+      <div class="box exist"><div class="t">Kubernetes API</div><div class="d">Pods, nodes, events</div></div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1;min-width:0;background:#eef8f7;padding:20px">
+      <div class="t" style="margin-bottom:14px">Sophron</div>
+      <div class="row" style="align-items:center">
+        <div class="box" style="width:118px;flex:none"><div class="t">Collector</div><div class="d">Reads data</div></div>
+        <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="box" style="width:92px;flex:none"><div class="t">Store</div><div class="d">SQLite</div></div>
+        <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div style="display:flex;flex-direction:column;gap:10px;width:166px;flex:none">
+          <div class="box"><div class="t">Rules engine</div><div class="d">Finds failures</div></div>
+          <div class="box"><div class="t">Cost engine</div><div class="d">Finds waste</div></div>
+        </div>
+        <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="box" style="flex:1"><div class="t">API + dashboard</div><div class="d">Shows results</div></div>
+      </div>
+      <div class="row" style="margin-top:14px;gap:12px">
+        <div class="box dash" style="flex:1"><div class="t">LLM (optional)</div><div class="d">Explains findings in plain English</div></div>
+        <div class="box" style="flex:1"><div class="t">Operator</div><div class="d">Applies approved fixes</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:14px;justify-content:flex-end;gap:12px">
+    <div class="box human" style="width:300px"><div class="t">Slack or webhook</div><div class="d">Alerts and Approve / Reject buttons</div></div>
+  </div>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--slate);border-color:#b8c4d3"></i>Already in your cluster</span>
+    <span><i class="sw" style="background:var(--teal-tint);border-color:var(--teal)"></i>Sophron</span>
+    <span><i class="sw" style="background:var(--amber-tint);border-color:var(--amber)"></i>Where humans step in</span>
+  </div>
+</figure>
+
+<!-- 3. Fix flow -->
+<figure id="fix-flow">
+  <h2>How a fix happens</h2>
+  <p class="sub">Sophron prepares the fix. Your policy and a human decide.</p>
+  <div class="row">
+    <div class="box sophron" style="flex:1"><div class="num">1</div><div class="t">Detect</div><div class="d">Example: vLLM pod out of memory</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="num">2</div><div class="t">Prepare</div><div class="d">A tested fix: lower the context length</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="num">3</div><div class="t">Check policy</div><div class="d">auto, approve or never</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#b7791f" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box human" style="flex:1"><div class="num amber">4</div><div class="t">Ask you</div><div class="d">Approve or reject in Slack</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="num">5</div><div class="t">Apply and log</div><div class="d">Then checks it worked</div></div>
+  </div>
+  <div class="row" style="margin-top:22px;gap:12px">
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">auto</div><div class="d">Safe and reversible. Example: restart a crashing pod.</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--amber-ink)">approve</div><div class="d">Needs a human. Example: change GPU memory settings.</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:#9b2c2c">never</div><div class="d">Blocked always. Example: delete anything.</div></div>
+  </div>
+</figure>
+
+<!-- 4. Roadmap -->
+<figure id="roadmap">
+  <h2>Build plan</h2>
+  <p class="sub">Nine phases over about six months, one working brick at a time.</p>
+  <div id="gantt"></div>
+</figure>
+
+<!-- 5. Lab -->
+<figure id="lab">
+  <h2>The lab cluster</h2>
+  <p class="sub">A whole Kubernetes cluster inside one EC2 machine, for testing Sophron.</p>
+  <div class="row" style="align-items:center">
+    <div class="box human" style="width:190px;flex:none"><div class="t">Your laptop</div><div class="d">Browser and terminal</div></div>
+    <div class="arrow" style="width:120px;flex-direction:column;gap:4px"><div class="d" style="margin:0;font-size:13px">SSH tunnel</div><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box exist" style="flex:1;padding:20px">
+      <div class="t" style="margin-bottom:4px">EC2 t3.2xlarge, Ubuntu</div>
+      <div class="d" style="margin-bottom:14px">Docker runs each Kubernetes node as a container (kind)</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="box"><div class="t">Control plane node</div><div class="d">The Kubernetes brain: API, scheduler</div></div>
+        <div class="box sophron"><div class="t">Worker: llm</div><div class="d">Model server (llama.cpp, Qwen2.5 1.5B) with /metrics</div></div>
+        <div class="box"><div class="t">Worker: system</div><div class="d">Prometheus, Grafana, load generator</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--teal-tint);border-color:var(--teal)"></i>What Sophron will watch</span>
+  </div>
+</figure>
+
+<script>
+const phases=[
+ [0,'Repo and plan',1,1],[1,'Lab cluster',2,3],[2,'Collector',4,6],[3,'Rules engine',7,9],
+ [4,'Cost engine',10,12],[5,'Dashboard, Helm, v0.1',13,16],[6,'Approvals and operator',17,20],
+ [7,'LLM explanations',21,22],[8,'Safe rollouts',23,26]];
+const W=26, g=document.getElementById('gantt');
+let h='<div style="display:grid;grid-template-columns:250px 1fr;row-gap:10px;align-items:center">';
+h+='<div></div><div style="display:grid;grid-template-columns:repeat(6,1fr);font-size:13px;color:#55657d">'+[1,2,3,4,5,6].map(m=>`<div style="border-left:1.5px solid #c5d0dd;padding-left:8px">Month ${m}</div>`).join('')+'</div>';
+for(const [n,name,a,b] of phases){
+  const rel=n===5;
+  h+=`<div style="font-size:16px;font-weight:500;display:flex"><span style="color:#55657d;font-weight:600;width:28px;flex:none">${n}</span>${name}</div>`;
+  const L=(a-1)/W*100, R=(b-a+1)/W*100, lab=a===b?'week '+a:'weeks '+a+' to '+b, late=L+R>80;
+  h+=`<div style="position:relative;height:30px;background:#fff;border-radius:8px;border:1px solid #dde4ec">
+     <div style="position:absolute;top:4px;bottom:4px;left:calc(${L}% + 3px);width:calc(${R}% - 6px);background:${rel?'#b7791f':'#0e7c7b'};border-radius:6px"></div>
+     <div style="position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:13px;color:#55657d;white-space:nowrap;${late?`right:calc(${100-L}% + 10px)`:`left:calc(${L+R}% + 10px)`}">${lab}</div></div>`;
+}
+h+='</div><div class="legend"><span><i class="sw" style="background:#b7791f;border-color:#b7791f"></i>First public release (v0.1)</span></div>';
+g.innerHTML=h;
+</script>
+</body></html>

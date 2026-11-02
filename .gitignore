@@ -31,3 +31,16 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Sophron: never commit secrets or cluster credentials
+*.env
+.env.*
+kubeconfig*
+*.kubeconfig
+
+# Editors / OS
+.vscode/
+.DS_Store
+
+# Sophron lab local state (passwords, port-forward pids)
+.lab/
