@@ -8,12 +8,50 @@ STATE_DIR    := .lab
 REQUESTS     ?= 25
 MON_NS       := monitoring
 MON_RELEASE  := monitoring
+IMAGE        ?= sophron-collector:dev
 
-.PHONY: help lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-ports lab-ports-stop lab-grafana-password
+.PHONY: help build test lint collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana-password
 
 help: ## List available commands
-	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+##@ Go
+build: ## Build the collector binary into bin/
+	CGO_ENABLED=0 go build -trimpath -o bin/sophron-collector ./cmd/collector
+
+test: ## Run unit tests (with the race detector)
+	go test -race -count=1 ./...
+
+lint: ## Format check, go vet, and golangci-lint if installed
+	@test -z "$$(gofmt -l .)" || (echo "Run gofmt -w on:"; gofmt -l .; exit 1)
+	go vet ./...
+	@command -v golangci-lint >/dev/null && golangci-lint run || echo "golangci-lint not installed, skipped (CI runs it)"
+
+##@ Collector (in the lab cluster)
+collector-image: ## Build the collector image and load it into the kind cluster
+	docker build -t $(IMAGE) .
+	kind load docker-image $(IMAGE) --name $(CLUSTER)
+
+collector-deploy: ## Deploy or redeploy the collector
+	kubectl apply -f deploy/collector/collector.yaml
+	kubectl -n sophron-system rollout restart deploy/sophron-collector
+	kubectl -n sophron-system rollout status deploy/sophron-collector --timeout=3m
+
+collector-up: collector-image collector-deploy ## Build, load and deploy the collector
+
+collector-logs: ## Follow the collector logs
+	kubectl -n sophron-system logs -f deploy/sophron-collector
+
+collector-status: ## Show the last collection cycle
+	@bash $(LAB_DIR)/scripts/api.sh /api/v1/status
+
+collector-snapshots: ## Show the latest snapshot of every model pod
+	@bash $(LAB_DIR)/scripts/api.sh /api/v1/snapshots/latest
+
+collector-check: ## Verify the Phase 2 "done when" list
+	@bash $(LAB_DIR)/scripts/check-collector.sh
+
+##@ Lab
 lab-tools: ## Install Docker, kind, kubectl, helm on Ubuntu (needs sudo, run once)
 	sudo bash $(LAB_DIR)/scripts/bootstrap-ubuntu.sh
 
@@ -58,12 +96,16 @@ lab-load: ## Send test requests to the model (REQUESTS=25 per worker, 4 workers)
 	@kubectl -n llm wait --for=condition=Ready pod -l job-name=loadgen --timeout=120s >/dev/null || true
 	@kubectl -n llm logs -f -l job-name=loadgen --max-log-requests 4 --prefix || true
 	@echo
+	@kubectl -n llm wait --for=condition=complete job/loadgen --timeout=60s >/dev/null 2>&1 || true
 	@echo "==> Summary (rerun anytime: make lab-load-summary)"
 	@$(MAKE) --no-print-directory lab-load-summary
 
 lab-load-summary: ## Show how many load requests succeeded
 	@kubectl -n llm get job loadgen -o jsonpath='{.status.succeeded}{" of 4 workers finished"}{"\n"}' 2>/dev/null || echo "No load job found"
 	@kubectl -n llm logs -l job-name=loadgen --prefix 2>/dev/null | grep finished || true
+
+lab-bench: ## Benchmark the model the same way every time (REQUESTS=25 per worker)
+	@bash $(LAB_DIR)/scripts/bench.sh $(REQUESTS)
 
 lab-check: ## Verify the Phase 1 "done when" list
 	bash $(LAB_DIR)/scripts/check.sh
