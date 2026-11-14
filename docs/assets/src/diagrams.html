@@ -188,6 +188,38 @@ h2{font-size:26px;font-weight:600;letter-spacing:-.2px}
   </div>
 </figure>
 
+<!-- 7. Rules -->
+<figure id="rules">
+  <h2>How a problem becomes a finding</h2>
+  <p class="sub">After every collection cycle, six detectors read the recent history of each model pod.</p>
+  <div class="row">
+    <div class="box exist" style="width:170px;flex:none"><div class="t">Snapshots</div><div class="d">Last 35 minutes, every 30 s</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1">
+      <div class="t" style="margin-bottom:10px">Detectors</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">pending-unschedulable</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">rollout-stuck</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">oom-killed</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">container-failing</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">slow-cold-start</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">queue-backlog</div></div>
+      </div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="width:200px;flex:none"><div class="t">Finding</div><div class="d">Title, plain-English summary, evidence, suggested fix</div></div>
+  </div>
+  <div class="row" style="margin-top:26px;gap:12px">
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">New problem</div><div class="d">Opened, logged</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">Still there</div><div class="d">Updated each cycle</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--amber-ink)">Gets worse</div><div class="d">Escalated</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">Gone 90 s</div><div class="d">Resolved, no flapping</div></div>
+  </div>
+  <div class="legend">
+    <span>Read them: make findings &nbsp;·&nbsp; API: /api/v1/findings &nbsp;·&nbsp; Slack: next</span>
+  </div>
+</figure>
+
 <script>
 const phases=[
  [0,'Repo and plan',1,1],[1,'Lab cluster',2,3],[2,'Collector',4,6],[3,'Rules engine',7,9],

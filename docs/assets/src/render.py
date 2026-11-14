@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 
 SRC = Path(__file__).parent / "diagrams.html"
 OUT = Path(__file__).parent.parent
-DIAGRAMS = ["overview", "architecture", "fix-flow", "roadmap", "lab", "collector"]
+DIAGRAMS = ["overview", "architecture", "fix-flow", "roadmap", "lab", "collector", "rules"]
 
 with sync_playwright() as p:
     browser = p.chromium.launch()

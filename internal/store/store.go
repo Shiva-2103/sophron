@@ -54,7 +54,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
   cpu_throttled_ratio         REAL,
   memory_working_set_bytes    REAL,
   gpu_utilization_ratio       REAL,
-  gpu_memory_used_bytes       REAL
+  gpu_memory_used_bytes       REAL,
+  revision                    TEXT,
+  created_at                  INTEGER,
+  started_at                  INTEGER,
+  ready_at                    INTEGER
 );
 CREATE INDEX IF NOT EXISTS snapshots_pod_time ON snapshots (namespace, pod, time);
 CREATE INDEX IF NOT EXISTS snapshots_time ON snapshots (time);
@@ -70,6 +74,31 @@ var columns = []string{
 	"generation_tokens_per_second", "prompt_tokens_per_second", "requests_running", "requests_waiting",
 	"kv_cache_usage_ratio", "cpu_cores", "cpu_throttled_ratio", "memory_working_set_bytes",
 	"gpu_utilization_ratio", "gpu_memory_used_bytes",
+	"revision", "created_at", "started_at", "ready_at",
+}
+
+// migrations add columns introduced after the first release, so databases
+// created by an older collector keep working. Each entry is column -> type.
+var migrations = []struct{ column, typ string }{
+	{"revision", "TEXT"},
+	{"created_at", "INTEGER"},
+	{"started_at", "INTEGER"},
+	{"ready_at", "INTEGER"},
+}
+
+// ms turns a time into unix milliseconds, or NULL when unset.
+func ms(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return t.UnixMilli()
+}
+
+func fromMS(v sql.NullInt64) time.Time {
+	if !v.Valid {
+		return time.Time{}
+	}
+	return time.UnixMilli(v.Int64).UTC()
 }
 
 func values(s collector.Snapshot) []any {
@@ -82,6 +111,7 @@ func values(s collector.Snapshot) []any {
 		s.GenerationTokensPerSecond, s.PromptTokensPerSecond, s.RequestsRunning, s.RequestsWaiting,
 		s.KVCacheUsageRatio, s.CPUCores, s.CPUThrottledRatio, s.MemoryWorkingSetBytes,
 		s.GPUUtilizationRatio, s.GPUMemoryUsedBytes,
+		s.Revision, ms(s.CreatedAt), ms(s.StartedAt), ms(s.ReadyAt),
 	}
 }
 
@@ -96,6 +126,7 @@ func (s *scanner) targets() []any {
 		&x.GenerationTokensPerSecond, &x.PromptTokensPerSecond, &x.RequestsRunning, &x.RequestsWaiting,
 		&x.KVCacheUsageRatio, &x.CPUCores, &x.CPUThrottledRatio, &x.MemoryWorkingSetBytes,
 		&x.GPUUtilizationRatio, &x.GPUMemoryUsedBytes,
+		&s.revision, &s.createdAt, &s.startedAt, &s.readyAt,
 	}
 }
 
@@ -106,7 +137,8 @@ type scanner struct {
 	ms                                                          int64
 	workloadKind, workloadName, phase, waiting, lastTerm        sql.NullString
 	warnReason, warnMessage, node, provider, instanceType, zone sql.NullString
-	capacityType                                                sql.NullString
+	capacityType, revision                                      sql.NullString
+	createdAt, startedAt, readyAt                               sql.NullInt64
 	nodeCPU, nodeMem                                            sql.NullFloat64
 	nodeGPUs                                                    sql.NullInt64
 }
@@ -120,6 +152,8 @@ func (s *scanner) result() collector.Snapshot {
 	x.Node, x.NodeProvider, x.NodeInstanceType = s.node.String, s.provider.String, s.instanceType.String
 	x.NodeZone, x.NodeCapacityType = s.zone.String, s.capacityType.String
 	x.NodeCPUCores, x.NodeMemoryBytes, x.NodeGPUs = s.nodeCPU.Float64, s.nodeMem.Float64, s.nodeGPUs.Int64
+	x.Revision, x.CreatedAt = s.revision.String, fromMS(s.createdAt)
+	x.StartedAt, x.ReadyAt = fromMS(s.startedAt), fromMS(s.readyAt)
 	return x
 }
 
@@ -142,7 +176,45 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("migrate schema: %w", err)
+	}
+	if _, err := db.Exec(findingsSchema); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create findings schema: %w", err)
+	}
 	return &Store{db: db}, nil
+}
+
+// migrate adds any missing snapshot columns.
+func migrate(db *sql.DB) error {
+	rows, err := db.Query("SELECT name FROM pragma_table_info('snapshots')")
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		have[name] = true
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, m := range migrations {
+		if have[m.column] {
+			continue
+		}
+		// Column names come from the constant list above, never from input.
+		if _, err := db.Exec("ALTER TABLE snapshots ADD COLUMN " + m.column + " " + m.typ); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close closes the database.
@@ -179,6 +251,14 @@ func (s *Store) Latest(ctx context.Context, maxAge time.Duration) ([]collector.S
 		WHERE time = (SELECT MAX(time) FROM snapshots t WHERE t.namespace = s.namespace AND t.pod = s.pod)
 		AND time >= ? ORDER BY namespace, pod`, strings.Join(columns, ", "))
 	return s.query(ctx, q, since)
+}
+
+// Since returns every snapshot since a time, oldest first. The rules engine
+// uses it to look at the recent history of all model pods in one query.
+func (s *Store) Since(ctx context.Context, since time.Time) ([]collector.Snapshot, error) {
+	//nolint:gosec // G201: only the constant column list is formatted in; values use placeholders
+	q := fmt.Sprintf(`SELECT %s FROM snapshots WHERE time >= ? ORDER BY time`, strings.Join(columns, ", "))
+	return s.query(ctx, q, since.UnixMilli())
 }
 
 // History returns snapshots of one pod since a time, oldest first.

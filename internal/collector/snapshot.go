@@ -14,8 +14,11 @@ type Snapshot struct {
 	Server    string    `json:"server"` // llamacpp, vllm, or the label value
 
 	// From Kubernetes: the pod.
-	WorkloadKind          string  `json:"workloadKind,omitempty"`
-	WorkloadName          string  `json:"workloadName,omitempty"`
+	WorkloadKind string `json:"workloadKind,omitempty"`
+	WorkloadName string `json:"workloadName,omitempty"`
+	// Which version of the workload this pod runs (pod-template-hash or
+	// controller-revision-hash). Two revisions at once means a rollout.
+	Revision              string  `json:"revision,omitempty"`
 	Phase                 string  `json:"phase"`
 	Ready                 bool    `json:"ready"`
 	Restarts              int32   `json:"restarts"`
@@ -27,6 +30,10 @@ type Snapshot struct {
 	GPURequest            int64   `json:"gpuRequest"`
 	// Seconds from pod start to Ready. Feeds the slow-cold-start detector.
 	StartupSeconds *float64 `json:"startupSeconds,omitempty"`
+	// When the pod was created, started (scheduled, init began) and last became Ready.
+	CreatedAt time.Time `json:"createdAt,omitzero"`
+	StartedAt time.Time `json:"startedAt,omitzero"`
+	ReadyAt   time.Time `json:"readyAt,omitzero"`
 
 	// From Kubernetes: the latest warning event for this pod (last 15 minutes).
 	WarningReason  string `json:"warningReason,omitempty"`

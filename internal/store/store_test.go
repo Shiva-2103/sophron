@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Shiva-2103/sophron/internal/collector"
+	"github.com/Shiva-2103/sophron/internal/rules"
 )
 
 func f(v float64) *float64 { return &v }
@@ -76,5 +77,85 @@ func TestHistoryAndPrune(t *testing.T) {
 	n, err := s.Prune(ctx, 90*time.Minute)
 	if err != nil || n != 3 {
 		t.Fatalf("pruned %d, %v; want 3", n, err)
+	}
+}
+
+func TestMigrationAddsNewColumns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "phase2.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a Phase 2 database by dropping the new columns.
+	for _, c := range []string{"revision", "created_at", "started_at", "ready_at"} {
+		if _, err := s.db.Exec("ALTER TABLE snapshots DROP COLUMN " + c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Close()
+
+	s, err = Open(path)
+	if err != nil {
+		t.Fatalf("reopen with migration: %v", err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	created := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
+	if err := s.Save(ctx, []collector.Snapshot{{Time: time.Now().UTC(), Namespace: "llm", Pod: "a", Server: "x", Revision: "abc", CreatedAt: created}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Since(ctx, time.Now().Add(-time.Minute))
+	if err != nil || len(got) != 1 || got[0].Revision != "abc" || !got[0].CreatedAt.Equal(created) || !got[0].StartedAt.IsZero() {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestFindingsLifecycle(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	fd := rules.Finding{
+		Key: "oom-killed/llm/llm-server", Detector: "oom-killed", Severity: rules.Critical,
+		Namespace: "llm", Pod: "p1", WorkloadKind: "Deployment", WorkloadName: "llm-server",
+		Title: "killed", Summary: "too much memory", Evidence: []string{"limit 512 MiB"},
+		Fix:       rules.Fix{Summary: "more memory", Steps: []string{"raise"}, Snippet: "memory: 768Mi"},
+		FirstSeen: now, LastSeen: now,
+	}
+	id, err := s.InsertFinding(ctx, fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only one open finding per key.
+	if _, err := s.InsertFinding(ctx, fd); err == nil {
+		t.Error("a second open finding with the same key should be rejected")
+	}
+
+	fd.ID, fd.Pod, fd.LastSeen = id, "p2", now.Add(time.Minute)
+	if err := s.UpdateFinding(ctx, fd); err != nil {
+		t.Fatal(err)
+	}
+	open, err := s.OpenFindings(ctx)
+	if err != nil || len(open) != 1 {
+		t.Fatalf("open = %+v, %v", open, err)
+	}
+	g := open[0]
+	if g.Pod != "p2" || g.Fix.Snippet != "memory: 768Mi" || g.Evidence[0] != "limit 512 MiB" || !g.LastSeen.Equal(now.Add(time.Minute)) {
+		t.Errorf("round trip lost data: %+v", g)
+	}
+
+	if err := s.ResolveFinding(ctx, id, now.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if open, _ := s.OpenFindings(ctx); len(open) != 0 {
+		t.Errorf("want none open, got %d", len(open))
+	}
+	// The same problem can open again after it resolved.
+	if _, err := s.InsertFinding(ctx, fd); err != nil {
+		t.Errorf("reopen after resolve: %v", err)
+	}
+	all, _ := s.Findings(ctx, "", 10)
+	resolved, _ := s.Findings(ctx, rules.StatusResolved, 10)
+	if len(all) != 2 || len(resolved) != 1 || resolved[0].ResolvedAt.IsZero() {
+		t.Errorf("all=%d resolved=%+v", len(all), resolved)
 	}
 }

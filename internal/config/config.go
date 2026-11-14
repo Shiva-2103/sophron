@@ -20,6 +20,12 @@ type Config struct {
 	MappingFile   string
 	Kubeconfig    string
 	LogLevel      string
+
+	Rules             bool
+	PendingAfter      time.Duration
+	RolloutStuckAfter time.Duration
+	SlowStartAfter    time.Duration
+	ResolveAfter      time.Duration
 }
 
 // Parse reads flags from args (usually os.Args[1:]).
@@ -35,6 +41,11 @@ func Parse(args []string) (*Config, error) {
 	fs.StringVar(&c.MappingFile, "mapping-file", env("SOPHRON_MAPPING_FILE", ""), "metric mapping YAML (default: built in)")
 	fs.StringVar(&c.Kubeconfig, "kubeconfig", env("KUBECONFIG", ""), "kubeconfig file (empty: in-cluster config)")
 	fs.StringVar(&c.LogLevel, "log-level", env("SOPHRON_LOG_LEVEL", "info"), "debug, info, warn or error")
+	fs.BoolVar(&c.Rules, "rules", envBool("SOPHRON_RULES", true), "run the rules engine after each cycle")
+	fs.DurationVar(&c.PendingAfter, "pending-after", envDuration("SOPHRON_PENDING_AFTER", 2*time.Minute), "report pods unschedulable for this long")
+	fs.DurationVar(&c.RolloutStuckAfter, "rollout-stuck-after", envDuration("SOPHRON_ROLLOUT_STUCK_AFTER", 3*time.Minute), "report rollouts whose new pod isn't Ready after this long")
+	fs.DurationVar(&c.SlowStartAfter, "slow-start-after", envDuration("SOPHRON_SLOW_START_AFTER", 2*time.Minute), "report pods taking longer than this to become Ready")
+	fs.DurationVar(&c.ResolveAfter, "resolve-after", envDuration("SOPHRON_RESOLVE_AFTER", 90*time.Second), "resolve a finding after it's gone for this long")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -50,6 +61,16 @@ func Parse(args []string) (*Config, error) {
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+func envBool(key string, def bool) bool {
+	switch os.Getenv(key) {
+	case "true", "1", "yes":
+		return true
+	case "false", "0", "no":
+		return false
 	}
 	return def
 }

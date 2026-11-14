@@ -95,6 +95,20 @@ make collector-snapshots # the latest snapshot as JSON
 
 The first build downloads Go modules and takes a few minutes. Later builds reuse the cache.
 
+## 8. Break things on purpose (Phase 3)
+
+The collector now runs six detectors after every cycle. Break the model server and watch it get caught:
+
+```bash
+make chaos-list               # the six scenarios
+make chaos SCENARIO=oom       # break one thing
+make findings                 # what Sophron found (give it a minute or two)
+make chaos-reset              # put it back
+make rules-check              # all six, automatic PASS/FAIL (~25 min)
+```
+
+Rebuild the collector first if it's older than Phase 3: `make collector-up`.
+
 ## Commands
 
 | Command | Does |
@@ -109,6 +123,9 @@ The first build downloads Go modules and takes a few minutes. Later builds reuse
 | `make lab-down` | Delete the cluster |
 | `make collector-up` / `collector-check` | Deploy and check the collector |
 | `make collector-snapshots` / `collector-logs` | See what it collected |
+| `make findings` / `detectors` | Problems found / what each detector checks |
+| `make chaos SCENARIO=...` / `chaos-reset` | Break the model server on purpose / undo |
+| `make rules-check` | Phase 3 check, all scenarios |
 
 ## Save money
 

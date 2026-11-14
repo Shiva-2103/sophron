@@ -43,6 +43,7 @@ type PodInfo struct {
 	ServerLabel           string // value of sophron.dev/model-server, if set
 	WorkloadKind          string // Deployment, StatefulSet, ...
 	WorkloadName          string
+	Revision              string // pod-template-hash or controller-revision-hash
 	Phase                 string
 	Ready                 bool
 	Restarts              int32
@@ -52,6 +53,7 @@ type PodInfo struct {
 	CPULimitCores         float64
 	MemoryLimitBytes      float64
 	GPURequest            int64
+	CreatedAt             time.Time
 	StartedAt             time.Time
 	ReadyAt               time.Time
 }
@@ -233,6 +235,8 @@ func PodInfoFrom(p *corev1.Pod) PodInfo {
 		Phase:       string(p.Status.Phase),
 	}
 	info.WorkloadKind, info.WorkloadName = workload(p)
+	info.Revision = first(p.Labels, "pod-template-hash", "controller-revision-hash")
+	info.CreatedAt = p.CreationTimestamp.Time
 	if p.Status.StartTime != nil {
 		info.StartedAt = p.Status.StartTime.Time
 	}

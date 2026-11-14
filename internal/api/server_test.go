@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Shiva-2103/sophron/internal/collector"
+	"github.com/Shiva-2103/sophron/internal/rules"
 )
 
 type fakeStore struct {
@@ -90,5 +91,40 @@ func TestLatestAndHistory(t *testing.T) {
 	}
 	if do(t, h, "/healthz").Code != 200 {
 		t.Error("healthz")
+	}
+}
+
+type fakeFindings struct{ gotStatus string }
+
+func (f *fakeFindings) Findings(_ context.Context, status string, _ int) ([]rules.Finding, error) {
+	f.gotStatus = status
+	return []rules.Finding{{Key: "oom-killed/llm/llm-server"}}, nil
+}
+
+func TestFindingsAPI(t *testing.T) {
+	ff := &fakeFindings{}
+	s := &Server{Store: &fakeStore{}, Interval: time.Second, Status: func() collector.Status { return collector.Status{} }}
+	if do(t, s.Handler(), "/api/v1/findings").Code != 404 {
+		t.Error("findings should 404 when the rules engine is off")
+	}
+	s.Findings, s.Detectors = ff, rules.All()
+	s.Rules = func() rules.Status { return rules.Status{Open: 1} }
+	h := s.Handler()
+	if rec := do(t, h, "/api/v1/findings"); rec.Code != 200 || ff.gotStatus != "open" {
+		t.Errorf("default should be open: %d %q", rec.Code, ff.gotStatus)
+	}
+	if do(t, h, "/api/v1/findings?status=all"); ff.gotStatus != "" {
+		t.Errorf("all should not filter, got %q", ff.gotStatus)
+	}
+	if do(t, h, "/api/v1/findings?status=nope").Code != 400 {
+		t.Error("bad status should be rejected")
+	}
+	var ds []map[string]string
+	rec := do(t, h, "/api/v1/detectors")
+	if json.Unmarshal(rec.Body.Bytes(), &ds) != nil || len(ds) != 6 {
+		t.Errorf("detectors: %s", rec.Body.String())
+	}
+	if do(t, h, "/api/v1/rules/status").Code != 200 {
+		t.Error("rules status")
 	}
 }

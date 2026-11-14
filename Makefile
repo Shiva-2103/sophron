@@ -10,7 +10,7 @@ MON_NS       := monitoring
 MON_RELEASE  := monitoring
 IMAGE        ?= sophron-collector:dev
 
-.PHONY: help build test lint collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
+.PHONY: help build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
 
 help: ## List available commands
 	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -50,6 +50,29 @@ collector-snapshots: ## Show the latest snapshot of every model pod
 
 collector-check: ## Verify the Phase 2 "done when" list
 	@bash $(LAB_DIR)/scripts/check-collector.sh
+
+##@ Rules engine (Phase 3)
+findings: ## Show open findings (problems Sophron found)
+	@bash $(LAB_DIR)/scripts/api.sh /api/v1/findings
+
+findings-all: ## Show open and resolved findings
+	@bash $(LAB_DIR)/scripts/api.sh '/api/v1/findings?status=all'
+
+detectors: ## List the detectors and what each looks for
+	@bash $(LAB_DIR)/scripts/api.sh /api/v1/detectors
+
+chaos-list: ## List the chaos scenarios
+	@bash $(LAB_DIR)/scripts/chaos.sh list
+
+chaos: ## Break the model server on purpose: make chaos SCENARIO=oom
+	@test -n "$(SCENARIO)" || (bash $(LAB_DIR)/scripts/chaos.sh list; echo; echo "Usage: make chaos SCENARIO=<name>"; exit 1)
+	@bash $(LAB_DIR)/scripts/chaos.sh $(SCENARIO)
+
+chaos-reset: ## Undo any chaos scenario
+	@bash $(LAB_DIR)/scripts/chaos.sh reset
+
+rules-check: ## Phase 3 check: run each chaos scenario, verify the right detector fires (~25 min)
+	@bash $(LAB_DIR)/scripts/check-rules.sh $(SCENARIOS)
 
 ##@ Lab
 lab-tools: ## Install Docker, kind, kubectl, helm on Ubuntu (needs sudo, run once)

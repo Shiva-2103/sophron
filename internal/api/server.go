@@ -6,10 +6,17 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Shiva-2103/sophron/internal/collector"
+	"github.com/Shiva-2103/sophron/internal/rules"
 )
+
+// FindingsReader is the part of the store the findings API needs.
+type FindingsReader interface {
+	Findings(ctx context.Context, status string, limit int) ([]rules.Finding, error)
+}
 
 // Reader is the part of the store the API needs.
 type Reader interface {
@@ -24,6 +31,11 @@ type Server struct {
 	Status   func() collector.Status
 	Synced   func() bool
 	Interval time.Duration
+
+	// Rules engine (optional: nil when --rules=false).
+	Findings  FindingsReader
+	Rules     func() rules.Status
+	Detectors []rules.Detector
 }
 
 // Handler returns the HTTP routes.
@@ -33,6 +45,9 @@ type Server struct {
 //	GET /api/v1/status                 details of the last cycle
 //	GET /api/v1/snapshots/latest       newest snapshot per pod (last 10 minutes)
 //	GET /api/v1/snapshots?namespace=&pod=&since=15m   one pod's history
+//	GET /api/v1/findings?status=open|resolved|all     problems Sophron found
+//	GET /api/v1/rules/status                          last rules engine run
+//	GET /api/v1/detectors                             what each detector looks for
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -44,6 +59,25 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /api/v1/snapshots/latest", s.latest)
 	mux.HandleFunc("GET /api/v1/snapshots", s.history)
+	mux.HandleFunc("GET /api/v1/findings", s.findings)
+	mux.HandleFunc("GET /api/v1/rules/status", func(w http.ResponseWriter, _ *http.Request) {
+		if s.Rules == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "rules engine is off (--rules=false)"})
+			return
+		}
+		writeJSON(w, http.StatusOK, s.Rules())
+	})
+	mux.HandleFunc("GET /api/v1/detectors", func(w http.ResponseWriter, _ *http.Request) {
+		type d struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		out := []d{}
+		for _, x := range s.Detectors {
+			out = append(out, d{x.Name(), x.Description()})
+		}
+		writeJSON(w, http.StatusOK, out)
+	})
 	return mux
 }
 
@@ -108,6 +142,42 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 		snaps = []collector.Snapshot{}
 	}
 	writeJSON(w, http.StatusOK, snaps)
+}
+
+func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
+	if s.Findings == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "rules engine is off (--rules=false)"})
+		return
+	}
+	status := r.URL.Query().Get("status")
+	switch status {
+	case "", "open":
+		status = rules.StatusOpen
+	case "all":
+		status = ""
+	case rules.StatusResolved:
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "status must be open, resolved or all"})
+		return
+	}
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 1000 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be 1 to 1000"})
+			return
+		}
+		limit = n
+	}
+	fs, err := s.Findings.Findings(r.Context(), status, limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if fs == nil {
+		fs = []rules.Finding{}
+	}
+	writeJSON(w, http.StatusOK, fs)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

@@ -26,6 +26,7 @@ import (
 	"github.com/Shiva-2103/sophron/internal/kube"
 	"github.com/Shiva-2103/sophron/internal/mapping"
 	"github.com/Shiva-2103/sophron/internal/prom"
+	"github.com/Shiva-2103/sophron/internal/rules"
 	"github.com/Shiva-2103/sophron/internal/store"
 )
 
@@ -81,9 +82,31 @@ func run() error {
 	}
 
 	c := &collector.Collector{Prom: promClient, Kube: inf, Mapping: m, Store: db, Log: log}
+	apiSrv := &api.Server{Store: db, Status: c.Status, Synced: inf.HasSynced, Interval: cfg.Interval}
+
+	if cfg.Rules {
+		rc := rules.DefaultConfig()
+		rc.PendingAfter, rc.RolloutStuckAfter, rc.SlowStartAfter = cfg.PendingAfter, cfg.RolloutStuckAfter, cfg.SlowStartAfter
+		engine := &rules.Engine{
+			Store: db, Detectors: rules.All(), Config: rc, Log: log,
+			Notifiers:    []rules.Notifier{rules.LogNotifier{Log: log}},
+			ResolveAfter: cfg.ResolveAfter,
+		}
+		c.AfterCycle = func(ctx context.Context, snaps []collector.Snapshot) {
+			st, err := engine.Process(ctx, snaps)
+			if err != nil {
+				log.Error("rules engine failed", "error", err)
+				return
+			}
+			log.Info("rules engine done", "open", st.Open, "opened", st.Opened, "resolved", st.Resolved)
+		}
+		apiSrv.Findings, apiSrv.Rules, apiSrv.Detectors = db, engine.Status, engine.Detectors
+		log.Info("rules engine on", "detectors", len(engine.Detectors))
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           (&api.Server{Store: db, Status: c.Status, Synced: inf.HasSynced, Interval: cfg.Interval}).Handler(),
+		Handler:           apiSrv.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
@@ -128,6 +151,11 @@ func prune(ctx context.Context, db *store.Store, retention time.Duration, log *s
 			log.Warn("prune failed", "error", err)
 		} else if n > 0 {
 			log.Info("pruned old snapshots", "deleted", n)
+		}
+		if n, err := db.PruneFindings(ctx, retention); err != nil {
+			log.Warn("prune findings failed", "error", err)
+		} else if n > 0 {
+			log.Info("pruned old findings", "deleted", n)
 		}
 		select {
 		case <-ctx.Done():

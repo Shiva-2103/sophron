@@ -31,15 +31,20 @@ Finds known problems. Each rule (a "detector") looks for one failure:
 
 | Detector | Notices | Suggests |
 |---|---|---|
-| `oom-context-length` | Pod ran out of memory, context length too high for the GPU | Lower `max-model-len` |
-| `kv-cache-pressure` | KV cache almost full, requests waiting | Add a replica |
-| `gpu-idle` | GPU under 10% use for hours | Scale down or share it |
-| `pending-no-gpu` | Pod waiting, no free GPU | Check the node pool |
-| `slow-cold-start` | Pod takes 10+ minutes to start | Cache the model on a volume |
+| `pending-unschedulable` | Pod has no node: no GPU, CPU or memory room, or no matching node | The fix for that cause, for example a lower CPU request |
+| `rollout-stuck` | New version not Ready while the old one still serves | `maxSurge: 0` / `Recreate`, or `rollout undo` |
+| `oom-killed` | Container killed for using too much memory | A new memory limit, or a smaller `--ctx-size` |
+| `container-failing` | Crash loop, image pull or container create errors | The log command and the usual LLM causes |
+| `slow-cold-start` | Pod takes 2+ minutes to become Ready | Keep the model on a volume, pre-pull images |
+| `queue-backlog` | Requests keep waiting for a free slot | More slots, or more capacity if the CPU/GPU is already busy |
+
+Planned once we test on GPUs and vLLM: `kv-cache-pressure`, `gpu-idle`.
+
+Each finding has a title, plain-English summary, evidence and a suggested fix. It stays open while the problem lasts and resolves 90 seconds after it's gone. See [the Phase 3 learning note](learning/03-phase-3-rules-engine.md).
 
 Why rules, not AI? Rules are free, work offline, can be tested, and never invent a risky action.
 
-Built with: Go, unit tests, plus a test scenario that triggers each failure on purpose
+Built with: Go, unit tests, plus chaos scenarios that trigger each failure on purpose (`make rules-check`)
 
 ### 4. Cost engine
 

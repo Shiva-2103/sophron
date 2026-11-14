@@ -34,6 +34,9 @@ type Collector struct {
 	WarningWindow time.Duration
 	// Now is replaceable in tests.
 	Now func() time.Time
+	// AfterCycle runs after every successful cycle with the snapshots it
+	// saved (possibly none). The rules engine hooks in here.
+	AfterCycle func(ctx context.Context, snaps []Snapshot)
 
 	mu              sync.Mutex
 	lastRun         time.Time
@@ -78,6 +81,9 @@ func (c *Collector) Run(ctx context.Context, interval time.Duration) {
 			c.Log.Error("collection cycle failed", "error", err)
 		} else {
 			c.Log.Info("collection cycle done", "pods", len(snaps), "took", time.Since(start).Round(time.Millisecond))
+			if c.AfterCycle != nil {
+				c.AfterCycle(ctx, snaps)
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -194,7 +200,8 @@ func (c *Collector) CollectOnce(ctx context.Context) ([]Snapshot, error) {
 func (c *Collector) build(now time.Time, server string, p kube.PodInfo, m podMetrics) Snapshot {
 	s := Snapshot{
 		Time: now, Namespace: p.Key.Namespace, Pod: p.Key.Name, Server: server,
-		WorkloadKind: p.WorkloadKind, WorkloadName: p.WorkloadName,
+		WorkloadKind: p.WorkloadKind, WorkloadName: p.WorkloadName, Revision: p.Revision,
+		CreatedAt: p.CreatedAt, StartedAt: p.StartedAt, ReadyAt: p.ReadyAt,
 		Phase: p.Phase, Ready: p.Ready, Restarts: p.Restarts,
 		WaitingReason: p.WaitingReason, LastTerminationReason: p.LastTerminationReason,
 		CPURequestCores: p.CPURequestCores, CPULimitCores: p.CPULimitCores,

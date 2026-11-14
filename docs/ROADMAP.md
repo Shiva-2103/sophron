@@ -47,8 +47,11 @@ Learn: Go project layout, `client-go` informers, RBAC, PromQL from code, Docker 
 
 Weeks 7 to 9. Detect real failures.
 
-- [ ] First 5 detectors with tests
-- [ ] A test scenario for each failure
+- [x] Engine: findings open, update, escalate and resolve (no flapping)
+- [x] 6 detectors with unit tests: pending, stuck rollout, OOM, crash, slow start, queue backlog
+- [x] A chaos scenario for each failure (`make chaos SCENARIO=...`)
+- [x] Findings API and `make findings`
+- [ ] `make rules-check` passes in the lab
 - [ ] Slack message with evidence and the suggested fix
 
 Learn: turning runbooks into code, chaos testing, alerts that aren't noisy
