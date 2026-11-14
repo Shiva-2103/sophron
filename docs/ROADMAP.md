@@ -51,7 +51,7 @@ Weeks 7 to 9. Detect real failures.
 - [x] 6 detectors with unit tests: pending, stuck rollout, OOM, crash, slow start, queue backlog
 - [x] A chaos scenario for each failure (`make chaos SCENARIO=...`)
 - [x] Findings API and `make findings`
-- [ ] `make rules-check` passes in the lab
+- [x] `make rules-check` passes in the lab (all 6 scenarios)
 - [ ] Slack message with evidence and the suggested fix
 
 Learn: turning runbooks into code, chaos testing, alerts that aren't noisy

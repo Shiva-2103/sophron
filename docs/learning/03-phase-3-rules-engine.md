@@ -114,6 +114,25 @@ We break the lab on purpose in ways that happen in real clusters, then check the
 
 ---
 
+## ***Lab results***
+
+`make rules-check` on the EC2 lab (t3.2xlarge, kind, llama.cpp + Qwen2.5 1.5B):
+
+| Scenario | Detector | Severity | Caught after | Finding |
+|---|---|---|---|---|
+| `oom` | `oom-killed` | critical | 45 s | being killed for using too much memory; raise to 768Mi or lower `--ctx-size` |
+| `crash` | `container-failing` | critical | 30 s | keeps crashing (2 restarts in 15m) |
+| `gpu` | `pending-unschedulable` | critical | 151 s | needs a GPU and no node has a free one |
+| `rollout` | `rollout-stuck` | warning | 195 s | new pod asks for 4 CPU cores and no matching node has that much free |
+| `slow-start` | `slow-cold-start` | warning | 135 s | still starting after 2m8s |
+| `queue` | `queue-backlog` | warning | 106 s | 3 waiting, 1 being served |
+
+All warning and critical findings resolved after the reset.
+
+> Times include the threshold on purpose: pending waits 2 min, a rollout 3 min, a slow start 2 min before speaking up.
+
+---
+
 ## ***Commands***
 
 | Command | Does |
