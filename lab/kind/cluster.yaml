@@ -3,11 +3,21 @@
 # worker 1 is labelled as the "LLM node": the model server runs there,
 # like a GPU node pool in a real cluster.
 # worker 2 runs everything else (Prometheus, Grafana, load generator).
+#
+# Grafana is published on port 3000 of the machine running kind:
+#   machine :3000  ->  control-plane container :30000  ->  Grafana NodePort 30000
+# On EC2, open port 3000 in the security group for your IP only
+# (make lab-grafana-allow-me does that for you).
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: sophron-lab
 nodes:
   - role: control-plane
+    extraPortMappings:
+      - containerPort: 30000   # Grafana's NodePort (lab/monitoring/values.yaml)
+        hostPort: 3000
+        listenAddress: "0.0.0.0"
+        protocol: TCP
   - role: worker
     labels:
       sophron.dev/role: llm

@@ -18,6 +18,10 @@ prometheus:
 
 grafana:
   # Password comes from the Makefile (GRAFANA_PASSWORD), never hard-coded here.
+  # NodePort 30000 is published as port 3000 on the host (lab/kind/cluster.yaml).
+  service:
+    type: NodePort
+    nodePort: 30000
   nodeSelector:
     sophron.dev/role: system
   defaultDashboardsEnabled: true

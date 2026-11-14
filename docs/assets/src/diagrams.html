@@ -142,14 +142,14 @@ h2{font-size:26px;font-weight:600;letter-spacing:-.2px}
   <p class="sub">A whole Kubernetes cluster inside one EC2 machine, for testing Sophron.</p>
   <div class="row" style="align-items:center">
     <div class="box human" style="width:190px;flex:none"><div class="t">Your laptop</div><div class="d">Browser and terminal</div></div>
-    <div class="arrow" style="width:120px;flex-direction:column;gap:4px"><div class="d" style="margin:0;font-size:13px">SSH tunnel</div><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="arrow" style="width:120px;flex-direction:column;gap:4px"><div class="d" style="margin:0;font-size:13px;text-align:center">SSH, and<br>Grafana on :3000</div><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="box exist" style="flex:1;padding:20px">
       <div class="t" style="margin-bottom:4px">EC2 t3.2xlarge, Ubuntu</div>
       <div class="d" style="margin-bottom:14px">Docker runs each Kubernetes node as a container (kind)</div>
       <div style="display:flex;flex-direction:column;gap:12px">
         <div class="box"><div class="t">Control plane node</div><div class="d">The Kubernetes brain: API, scheduler</div></div>
         <div class="box sophron"><div class="t">Worker: llm</div><div class="d">Model server (llama.cpp, Qwen2.5 1.5B) with /metrics</div></div>
-        <div class="box"><div class="t">Worker: system</div><div class="d">Prometheus, Grafana, load generator</div></div>
+        <div class="box"><div class="t">Worker: system</div><div class="d">Prometheus, Grafana (published on :3000), load generator</div></div>
       </div>
     </div>
   </div>

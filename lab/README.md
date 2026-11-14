@@ -52,31 +52,37 @@ make lab-load         # 4 workers x 25 requests
 make lab-check        # tokens per second should now be above 0
 ```
 
-## 6. Open Grafana and Prometheus from your laptop
+## 6. Open Grafana from your laptop
 
-On the EC2 machine:
-
-```bash
-make lab-ports
-make lab-grafana-password
-```
-
-On your laptop, open a tunnel in a new terminal and keep it open:
+Grafana is always published on port 3000 of the EC2 instance. No port-forward needed.
 
 ```bash
-ssh -i ~/.ssh/<your-key>.pem -N \
-  -L 3000:localhost:3000 -L 9090:localhost:9090 -L 8080:localhost:8080 \
-  ubuntu@<public-ip>
+make lab-grafana-allow-me   # opens port 3000 in the security group, for your IP only
+make lab-grafana            # prints the URL and the admin password
 ```
 
-Then browse:
+Then browse to `http://<ec2-public-ip>:3000` (user `admin`).
 
-| UI | Link |
+| How it works | |
 |---|---|
-| Grafana (user `admin`) | http://localhost:3000 |
-| Prometheus | http://localhost:9090 |
+| `lab/kind/cluster.yaml` | Maps port 3000 on the instance to port 30000 in the kind control-plane container |
+| `lab/monitoring/values.yaml` | Grafana's Service is a NodePort on 30000 |
+| `make lab-grafana-allow-me` | Adds a security group rule for the IP you SSH'd in from (`/32`) |
 
-Try this query in Prometheus: `rate(llamacpp:tokens_predicted_total[1m])`
+> Never open port 3000 to `0.0.0.0/0`. Grafana is plain HTTP here.
+> Your home IP can change. If Grafana stops loading, run `make lab-grafana-allow-me` again, and `make lab-grafana-revoke-me` to remove an old rule.
+
+Prometheus and the model API stay private. Reach them through an SSH tunnel:
+
+```bash
+# on the instance
+make lab-ports
+
+# on your laptop
+ssh -i ~/.ssh/<your-key>.pem -N -L 9090:localhost:9090 -L 8080:localhost:8080 ubuntu@<public-ip>
+```
+
+Try this query in Grafana (Explore) or Prometheus: `rate(llamacpp:tokens_predicted_total[1m])`
 
 ## 7. Run the Sophron collector (Phase 2)
 
@@ -97,7 +103,9 @@ The first build downloads Go modules and takes a few minutes. Later builds reuse
 | `make lab-check` | Check the Phase 1 goals |
 | `make lab-load` | Send requests (`REQUESTS=100` for more) |
 | `make lab-status` | Show nodes and pods |
-| `make lab-ports` / `lab-ports-stop` | Open or close local UI ports |
+| `make lab-grafana` | Grafana URL and password |
+| `make lab-grafana-allow-me` / `revoke-me` | Open or close port 3000 for your IP |
+| `make lab-ports` / `lab-ports-stop` | Open or close Prometheus and model API ports |
 | `make lab-down` | Delete the cluster |
 | `make collector-up` / `collector-check` | Deploy and check the collector |
 | `make collector-snapshots` / `collector-logs` | See what it collected |
@@ -115,3 +123,5 @@ Stop the EC2 instance when you're done. You pay per hour while it runs. The clus
 | Model pod `CrashLoopBackOff` | `kubectl -n llm logs deploy/llm-server` |
 | `up=0` in lab-check | Wait 30 seconds, Prometheus scrapes every 15 seconds |
 | Pods `Pending` | `kubectl describe pod ...` and look at Events at the bottom |
+| Grafana not on port 3000 | Cluster is older than the port mapping: `make lab-down && make lab-up` |
+| Grafana times out from the laptop | Security group: `make lab-grafana-allow-me` (your IP may have changed) |

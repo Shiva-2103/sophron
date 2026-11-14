@@ -10,7 +10,7 @@ MON_NS       := monitoring
 MON_RELEASE  := monitoring
 IMAGE        ?= sophron-collector:dev
 
-.PHONY: help build test lint collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana-password
+.PHONY: help build test lint collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
 
 help: ## List available commands
 	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -72,11 +72,14 @@ lab-up: ## Create the lab cluster with monitoring and a model server
 	  -f $(LAB_DIR)/monitoring/values.yaml \
 	  --set grafana.adminPassword="$$(cat $(STATE_DIR)/grafana-password)" \
 	  --wait --timeout 10m
+	@echo
+	@bash $(LAB_DIR)/scripts/grafana.sh url || true
+	@echo
 	@echo "==> Deploying the model server (first start downloads about 1 GB)"
 	kubectl apply -f $(LAB_DIR)/llm/model-server.yaml
 	kubectl -n llm rollout status deploy/llm-server --timeout=15m
 	@echo
-	@echo "Lab is up. Next: make lab-check   (then: make lab-load)"
+	@echo "Lab is up. Grafana: make lab-grafana. Next: make lab-check (then: make lab-load)"
 
 lab-down: ## Delete the lab cluster (the model download is lost too)
 	kind delete cluster --name $(CLUSTER)
@@ -110,11 +113,20 @@ lab-bench: ## Benchmark the model the same way every time (REQUESTS=25 per worke
 lab-check: ## Verify the Phase 1 "done when" list
 	bash $(LAB_DIR)/scripts/check.sh
 
-lab-ports: ## Open Grafana :3000, Prometheus :9090, model :8080 on this machine's localhost
+lab-ports: ## Open Prometheus :9090 and the model API :8080 on this machine's localhost
 	bash $(LAB_DIR)/scripts/ports.sh start
 
 lab-ports-stop: ## Close the ports opened by lab-ports
 	bash $(LAB_DIR)/scripts/ports.sh stop
+
+lab-grafana: ## Show the Grafana URL (port 3000) and login
+	@bash $(LAB_DIR)/scripts/grafana.sh url
+
+lab-grafana-allow-me: ## EC2: open port 3000 in the security group for your IP only
+	@bash $(LAB_DIR)/scripts/grafana.sh allow
+
+lab-grafana-revoke-me: ## EC2: close port 3000 for your IP again
+	@bash $(LAB_DIR)/scripts/grafana.sh revoke
 
 lab-grafana-password: ## Print the Grafana admin password (user: admin)
 	@cat $(STATE_DIR)/grafana-password

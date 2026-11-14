@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Open (or close) local ports to the lab's web UIs using kubectl port-forward.
+# Grafana is not here: it is always published on port 3000 (see lab/kind/cluster.yaml).
 # Ports listen on 127.0.0.1 only, so nothing is exposed to the internet.
 # From your laptop, reach them through an SSH tunnel (see lab/README.md).
 #
@@ -26,21 +27,19 @@ stop() {
 
 start() {
   stop >/dev/null
-  local grafana prom
-  grafana="$(svc_by_label monitoring app.kubernetes.io/name=grafana)"
+  local prom
   prom="$(svc_by_label monitoring app=kube-prometheus-stack-prometheus)"
 
   forward() { # namespace service local:remote
     kubectl -n "$1" port-forward "svc/$2" "$3" --address 127.0.0.1 >"$STATE_DIR/pf-$2.log" 2>&1 &
     echo $! >> "$PIDS"
   }
-  forward monitoring "$grafana" 3000:80
   forward monitoring "$prom"    9090:9090
   forward llm        llm-server 8080:8080
   sleep 2
 
   echo "Open on this machine (or through your SSH tunnel):"
-  echo "  Grafana     http://localhost:3000   user: admin  password: make lab-grafana-password"
+  echo "  Grafana     http://localhost:3000   (always on, no forward needed: make lab-grafana)"
   echo "  Prometheus  http://localhost:9090"
   echo "  Model API   http://localhost:8080/v1/chat/completions"
   echo "Stop with: make lab-ports-stop"
