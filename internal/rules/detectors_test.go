@@ -168,6 +168,16 @@ func TestContainerFailing(t *testing.T) {
 		t.Errorf("title = %q", got.Title)
 	}
 
+	// Found on the lab: a brand-new pod that crashed before our first
+	// snapshot of it must not say "0 restarts".
+	young := pod("p1", func(s *collector.Snapshot) {
+		s.Ready, s.Restarts, s.WaitingReason, s.LastTerminationReason = false, 2, "CrashLoopBackOff", "Error"
+		s.CreatedAt = now.Add(-40 * time.Second)
+	})
+	if got := one(t, detectContainerFailing(input([]collector.Snapshot{young}))); !strings.Contains(got.Title, "(2 restarts in 15m)") {
+		t.Errorf("young pod title = %q", got.Title)
+	}
+
 	none(t, detectContainerFailing(input([]collector.Snapshot{oomPod("p1")})))
 	none(t, detectContainerFailing(input([]collector.Snapshot{pod("p1")})))
 }

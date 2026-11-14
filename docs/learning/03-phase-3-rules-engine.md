@@ -161,6 +161,7 @@ We break the lab on purpose in ways that happen in real clusters, then check the
 > | `kubectl apply` can't remove fields it never set (a GPU limit or `rollingUpdate` added by a patch) | `chaos reset` removes those with a JSON patch first, then applies the manifest |
 > | The slow-start check could miss the short "still starting" window (~40 s) between polls | Fake download raised to 210 s, and the check accepts either the "still starting" or the "took ... to start" title |
 > | staticcheck flagged an unused helper | Removed it |
+> | In the lab, the crash finding said "keeps crashing (0 restarts in 15m)" | The new pod crashed before our first snapshot of it, so "restarts now minus lowest seen" was 0. A pod created inside the window started at 0, so we use its total. Added a test |
 {.is-danger}
 
 > **Useful Links**

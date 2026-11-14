@@ -129,7 +129,13 @@ func restartsWithin(hist []collector.Snapshot, now time.Time, window time.Durati
 	if len(hist) == 0 {
 		return 0
 	}
-	last := hist[len(hist)-1].Restarts
+	latest := hist[len(hist)-1]
+	last := latest.Restarts
+	// A pod created inside the window started with 0 restarts, even if it
+	// crashed before our first snapshot of it.
+	if !latest.CreatedAt.IsZero() && now.Sub(latest.CreatedAt) <= window {
+		return last
+	}
 	low := last
 	for _, h := range hist {
 		if now.Sub(h.Time) <= window && h.Restarts < low {
