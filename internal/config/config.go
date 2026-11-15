@@ -3,9 +3,12 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	iofs "io/fs"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -30,6 +33,7 @@ type Config struct {
 	ClusterName      string
 	Timezone         string
 	SlackWebhookURL  string // a secret: never log it
+	SlackWebhookFile string // file holding the URL (a mounted Secret); wins over SlackWebhookURL
 	SlackMinSeverity string
 	SlackCooldown    time.Duration
 	SendTestAlert    bool
@@ -56,6 +60,7 @@ func Parse(args []string) (*Config, error) {
 	fs.StringVar(&c.ClusterName, "cluster-name", env("SOPHRON_CLUSTER_NAME", "kubernetes"), "cluster name shown in alerts")
 	fs.StringVar(&c.Timezone, "timezone", env("SOPHRON_TIMEZONE", "UTC"), "time zone for times in alerts, e.g. Asia/Kolkata (UTC is shown too)")
 	fs.StringVar(&c.SlackWebhookURL, "slack-webhook-url", env("SOPHRON_SLACK_WEBHOOK_URL", ""), "Slack incoming webhook URL; prefer the env var from a Secret (empty: Slack off)")
+	fs.StringVar(&c.SlackWebhookFile, "slack-webhook-file", env("SOPHRON_SLACK_WEBHOOK_FILE", ""), "file containing the Slack webhook URL, e.g. a mounted Secret (missing file: Slack off)")
 	fs.StringVar(&c.SlackMinSeverity, "slack-min-severity", env("SOPHRON_SLACK_MIN_SEVERITY", "warning"), "send findings at or above this severity: info, warning or critical")
 	fs.DurationVar(&c.SlackCooldown, "slack-cooldown", envDuration("SOPHRON_SLACK_COOLDOWN", 10*time.Minute), "don't alert again for a problem that returns within this long")
 	fs.BoolVar(&c.SendTestAlert, "send-test-alert", false, "send a sample alert to Slack and exit")
@@ -67,6 +72,15 @@ func Parse(args []string) (*Config, error) {
 	}
 	if c.Retention < time.Hour {
 		return nil, fmt.Errorf("retention must be at least 1h, got %s", c.Retention)
+	}
+	if c.SlackWebhookFile != "" {
+		b, err := os.ReadFile(c.SlackWebhookFile)
+		switch {
+		case err == nil:
+			c.SlackWebhookURL = strings.TrimSpace(string(b))
+		case !errors.Is(err, iofs.ErrNotExist):
+			return nil, fmt.Errorf("read slack webhook file: %w", err)
+		}
 	}
 	if _, err := time.LoadLocation(c.Timezone); err != nil {
 		return nil, fmt.Errorf("unknown timezone %q", c.Timezone)

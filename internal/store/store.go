@@ -186,6 +186,10 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("create findings schema: %w", err)
 	}
+	if _, err := db.Exec(alertSchema); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create alert schema: %w", err)
+	}
 	if err := migrate(db, "findings", findingMigrations); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate findings: %w", err)

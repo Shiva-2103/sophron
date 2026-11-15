@@ -144,7 +144,8 @@ A finding nobody sees fixes nothing. The engine now hands every event (opened, e
 | Message template | `internal/notify/message.go` | Turns a finding into a Slack Block Kit message |
 | Sender | `internal/notify/slack.go` | Queue, filter, cooldown, retries |
 | Wiring and flags | `cmd/collector/main.go`, `internal/config/config.go` | Slack on when a webhook URL is set |
-| Secret wiring | `deploy/collector/collector.yaml` | Env var from the `sophron-slack` Secret, `optional: true` |
+| Secret wiring | `deploy/collector/collector.yaml` | The `sophron-slack` Secret mounted as a read-only file, `optional: true` |
+| Cooldown memory | `internal/store/alerts.go` | Cooldown marks in SQLite, so a restart doesn't repeat alerts |
 | Resolution | `internal/rules/resolution.go`, `internal/kube/changes.go` | How it went away, and with which tool |
 | Lab helper | `lab/scripts/slack.sh` | `make slack-secret`, `slack-test`, `slack-off` |
 
@@ -189,7 +190,7 @@ The resolution is saved with the finding (`resolution` column, added by migratio
 | Rule | Default | Flag / env |
 |---|---|---|
 | Minimum severity | `warning` (info stays in the API) | `--slack-min-severity` |
-| Cooldown: a problem that returns within it is not alerted again, and its "resolved" is skipped too | 10 min | `--slack-cooldown` |
+| Cooldown: a problem that returns within it is not alerted again, and its "resolved" is skipped too. Saved in SQLite, so it survives restarts | 10 min | `--slack-cooldown` |
 | Escalation always alerts | It got worse, so speak up | |
 | Pace | 1 message per second (Slack's webhook limit) | |
 
@@ -207,11 +208,12 @@ Anyone holding it can post to your channel.
 | Risk | What we do |
 |---|---|
 | In Git | Never. The manifest reads it from a Secret |
+| In `kubectl describe` or the process environment | Mounted as a file (`--slack-webhook-file`), not an env var |
 | In shell history or `ps` | `make slack-secret` reads it with a hidden prompt (`read -s`) and pipes it with `printf` (a shell builtin) to `kubectl create secret --from-file=/dev/stdin` |
 | In logs | Go's HTTP errors include the URL. We unwrap `url.Error` and keep only the cause; a test checks the token never appears in an error |
 | Plain http | Rejected; https only (http allowed for `127.0.0.1` in tests) |
 
-> `optional: true` on the `secretKeyRef` means the collector starts without the Secret, with Slack off. Install first, add alerts later.
+> `optional: true` on the Secret volume means the collector starts without the Secret, with Slack off. Install first, add alerts later.
 
 ---
 
@@ -277,6 +279,8 @@ Anyone holding it can post to your channel.
 > | The distroless image may lack time zone data, so `Asia/Kolkata` could fail | Embedded it in the binary with `import _ "time/tzdata"` (~450 KB) |
 > | Resolved alerts said nothing about how the problem went away | Compare the workload at last-seen vs now, and read `managedFields` for the tool that changed it (RBAC: `get` on Deployments, StatefulSets, DaemonSets, still read-only) |
 > | `managedFields` also lists status writes by Kubernetes controllers, which would always look newest | Skip entries with a `subresource` and `kube-controller-manager` |
+> | Restarting the collector forgot which alerts went out, so a returning problem could alert twice | Cooldown marks saved in an `alert_marks` table and loaded on start; expired ones are skipped |
+> | The webhook URL as an env var is visible to anyone who can `exec` into the pod and read the environment | Mounted the Secret as a file (mode 0440) and read it with `--slack-webhook-file` |
 > | A function named `context` in the package clashed with the `context` import | Renamed it `contextBlock` |
 {.is-danger}
 

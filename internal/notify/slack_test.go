@@ -296,3 +296,56 @@ func dump(t *testing.T, m Message) string {
 	}
 	return b.String()
 }
+
+type memState struct{ marks map[string]AlertMark }
+
+func (m *memState) AlertMarks(context.Context) (map[string]AlertMark, error) { return m.marks, nil }
+func (m *memState) SaveAlertMark(_ context.Context, k string, v AlertMark) error {
+	if v.LastSent.IsZero() && !v.Muted {
+		delete(m.marks, k)
+		return nil
+	}
+	m.marks[k] = v
+	return nil
+}
+
+func TestCooldownSurvivesRestart(t *testing.T) {
+	st := &memState{marks: map[string]AlertMark{}}
+	ctx := context.Background()
+	f := SampleFinding(t0)
+
+	s, _ := newTestSlack(t, "https://hooks.slack.com/services/T/B/x")
+	if err := s.UseState(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Notify(ctx, opened(f))
+	if !st.marks[f.Key].LastSent.Equal(t0) {
+		t.Fatalf("mark not saved: %+v", st.marks)
+	}
+
+	// A new collector process, 2 minutes later: the same problem opens again.
+	s2, _ := newTestSlack(t, "https://hooks.slack.com/services/T/B/x")
+	s2.now = func() time.Time { return t0.Add(2 * time.Minute) }
+	if err := s2.UseState(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	_ = s2.Notify(ctx, opened(f))
+	if len(s2.queue) != 0 {
+		t.Fatal("restart forgot the cooldown and alerted again")
+	}
+	_ = s2.Notify(ctx, rules.Event{Type: rules.EventResolved, Finding: f})
+	if len(s2.queue) != 0 {
+		t.Fatal("resolved of a muted repeat should be skipped")
+	}
+
+	// Expired marks are ignored on load.
+	s3, _ := newTestSlack(t, "https://hooks.slack.com/services/T/B/x")
+	s3.now = func() time.Time { return t0.Add(time.Hour) }
+	if err := s3.UseState(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	_ = s3.Notify(ctx, opened(f))
+	if len(s3.queue) != 1 {
+		t.Fatal("an hour later the problem should alert again")
+	}
+}

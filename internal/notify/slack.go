@@ -51,6 +51,54 @@ type Slack struct {
 	mu       sync.Mutex
 	lastSent map[string]time.Time // finding key → when its last alert went out
 	muted    map[string]bool      // keys whose repeat alert was skipped
+	state    AlertState           // optional: keeps the two maps across restarts
+}
+
+// AlertMark is what the cooldown remembers about one finding key.
+type AlertMark struct {
+	LastSent time.Time
+	Muted    bool
+}
+
+// AlertState stores cooldown marks, so a collector restart doesn't repeat
+// an alert that went out a minute ago.
+type AlertState interface {
+	AlertMarks(ctx context.Context) (map[string]AlertMark, error)
+	SaveAlertMark(ctx context.Context, key string, m AlertMark) error
+}
+
+// UseState loads saved cooldown marks and keeps them up to date from now on.
+func (s *Slack) UseState(ctx context.Context, st AlertState) error {
+	marks, err := st.AlertMarks(ctx)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, m := range marks {
+		if s.now().Sub(m.LastSent) >= s.cfg.Cooldown && !m.Muted {
+			continue // expired
+		}
+		s.lastSent[k] = m.LastSent
+		if m.Muted {
+			s.muted[k] = true
+		}
+	}
+	s.state = st
+	return nil
+}
+
+// persist saves one key's mark. Call with s.mu held.
+func (s *Slack) persist(key string) {
+	if s.state == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	m := AlertMark{LastSent: s.lastSent[key], Muted: s.muted[key]}
+	if err := s.state.SaveAlertMark(ctx, key, m); err != nil {
+		s.log.Warn("could not save slack cooldown state", "finding", key, "error", err)
+	}
 }
 
 const (
@@ -130,6 +178,7 @@ func (s *Slack) wanted(e rules.Event) bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.persist(f.Key)
 	switch e.Type {
 	case rules.EventOpened:
 		if last, ok := s.lastSent[f.Key]; ok && s.now().Sub(last) < s.cfg.Cooldown {

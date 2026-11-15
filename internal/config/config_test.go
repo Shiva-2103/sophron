@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -36,5 +37,22 @@ func TestSlackSettings(t *testing.T) {
 	}
 	if _, err := Parse([]string{"--timezone=Mars/Olympus"}); err == nil {
 		t.Error("want an error for an unknown time zone")
+	}
+}
+
+func TestSlackWebhookFile(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/webhook-url"
+	if err := os.WriteFile(path, []byte("https://hooks.slack.com/services/T/B/x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Parse([]string{"--slack-webhook-file=" + path})
+	if err != nil || c.SlackWebhookURL != "https://hooks.slack.com/services/T/B/x" {
+		t.Fatalf("url %q, err %v", c.SlackWebhookURL, err)
+	}
+	// No Secret mounted: Slack is simply off.
+	c, err = Parse([]string{"--slack-webhook-file=" + dir + "/missing"})
+	if err != nil || c.SlackWebhookURL != "" {
+		t.Fatalf("missing file: url %q, err %v", c.SlackWebhookURL, err)
 	}
 }

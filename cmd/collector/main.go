@@ -83,6 +83,11 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	if slack != nil {
+		if err := slack.UseState(ctx, db); err != nil {
+			log.Warn("could not load slack cooldown state", "error", err)
+		}
+	}
 
 	inf := kube.NewInformers(clientset, 10*time.Minute)
 	inf.Start(ctx)
@@ -204,6 +209,9 @@ func prune(ctx context.Context, db *store.Store, retention time.Duration, log *s
 			log.Warn("prune failed", "error", err)
 		} else if n > 0 {
 			log.Info("pruned old snapshots", "deleted", n)
+		}
+		if err := db.PruneAlertMarks(ctx, 24*time.Hour); err != nil {
+			log.Warn("prune alert marks failed", "error", err)
 		}
 		if n, err := db.PruneFindings(ctx, retention); err != nil {
 			log.Warn("prune findings failed", "error", err)

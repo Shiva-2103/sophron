@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Shiva-2103/sophron/internal/collector"
+	"github.com/Shiva-2103/sophron/internal/notify"
 	"github.com/Shiva-2103/sophron/internal/rules"
 )
 
@@ -165,5 +166,27 @@ func TestFindingsLifecycle(t *testing.T) {
 	}
 	if r := resolved[0].Resolution; r == nil || r.ChangedBy != "kubectl apply" || r.Changes[0] != "memory limit 512Mi → 6Gi" {
 		t.Errorf("resolution lost: %+v", r)
+	}
+}
+
+func TestAlertMarks(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	at := time.Now().UTC().Truncate(time.Millisecond)
+	if err := s.SaveAlertMark(ctx, "oom-killed/llm/x", notify.AlertMark{LastSent: at, Muted: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveAlertMark(ctx, "oom-killed/llm/x", notify.AlertMark{LastSent: at}); err != nil {
+		t.Fatal(err) // upsert
+	}
+	m, err := s.AlertMarks(ctx)
+	if err != nil || len(m) != 1 || !m["oom-killed/llm/x"].LastSent.Equal(at) || m["oom-killed/llm/x"].Muted {
+		t.Fatalf("marks = %+v, %v", m, err)
+	}
+	if err := s.SaveAlertMark(ctx, "oom-killed/llm/x", notify.AlertMark{}); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ := s.AlertMarks(ctx); len(m) != 0 {
+		t.Errorf("empty mark should delete the row, got %+v", m)
 	}
 }

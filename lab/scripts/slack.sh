@@ -40,7 +40,7 @@ case "${1:-}" in
       echo "No Slack Secret yet. Run: make slack-secret" >&2
       exit 1
     fi
-    # The pod already has the URL in its environment, so we never handle it here.
+    # The pod already has the URL in its mounted Secret, so we never handle it here.
     kubectl -n "$ns" exec "$deploy" -- /sophron-collector --send-test-alert
     ;;
   off)

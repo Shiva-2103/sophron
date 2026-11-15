@@ -91,15 +91,12 @@ spec:
               value: sophron-lab
             - name: SOPHRON_TIMEZONE
               value: Asia/Kolkata
-            # Slack alerts. The webhook URL is a secret, so it comes from a
-            # Secret (make slack-secret), never from this file. optional: the
-            # collector runs without it, with Slack off.
-            - name: SOPHRON_SLACK_WEBHOOK_URL
-              valueFrom:
-                secretKeyRef:
-                  name: sophron-slack
-                  key: webhook-url
-                  optional: true
+            # Slack alerts. The webhook URL is a secret: it comes from the
+            # sophron-slack Secret (make slack-secret), mounted as a file
+            # rather than an env var, so it doesn't show in the process
+            # environment. No Secret: Slack is off.
+            - name: SOPHRON_SLACK_WEBHOOK_FILE
+              value: /etc/sophron/slack/webhook-url
           ports:
             - name: http
               containerPort: 8080
@@ -120,10 +117,18 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: slack
+              mountPath: /etc/sophron/slack
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: sophron-data
+        - name: slack
+          secret:
+            secretName: sophron-slack
+            optional: true
+            defaultMode: 0440  # readable by the pod group (fsGroup 65532)
 ---
 apiVersion: v1
 kind: Service
