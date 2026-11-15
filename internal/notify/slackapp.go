@@ -73,12 +73,14 @@ func (s *Slack) RunApprovals(ctx context.Context, appToken string, d Decider) {
 		}
 	}()
 	for ctx.Err() == nil {
-		if err := client.RunContext(ctx); err != nil && ctx.Err() == nil {
-			s.log.Warn("slack socket mode stopped; reconnecting in 10s", "error", err)
-			select {
-			case <-ctx.Done():
-			case <-time.After(10 * time.Second):
-			}
+		err := client.RunContext(ctx) // returns only when the connection ends
+		if ctx.Err() != nil {
+			return
+		}
+		s.log.Warn("slack socket mode stopped; reconnecting in 10s", "error", err)
+		select {
+		case <-ctx.Done():
+		case <-time.After(10 * time.Second):
 		}
 	}
 }
