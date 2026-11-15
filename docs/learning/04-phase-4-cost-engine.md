@@ -74,6 +74,7 @@ On every node: **model pods + other pods + idle = node price.** Other pods pay f
 | Month forecast | Cost per hour × 730 | Same |
 | Cost per 1M output tokens | Cost in the window ÷ output tokens in the window × 10⁶ | Same, `WINDOW=1h` |
 | Cost per 1M tokens | Same with input + output | Same |
+| Cost per 1M output tokens while busy | Only cycles producing tokens (≥ 0.5/s). The gap to the average is what idle time costs | Same (`costPer1MOutputTokensBusy`, `busyShare`) |
 | Capacity used | Output tokens/s now ÷ the highest seen in 7 days | Same |
 | Idle | Node price − model pods − other pods | `make cost-nodes` |
 | Down cost | Cost while no pod of the workload was Ready, while the finding was open | Resolved findings, Slack |
@@ -100,7 +101,7 @@ Under load, llama.cpp uses ~5.85 cores and reserves 3 GiB:
 
 When idle, the pod uses little CPU, so it pays for its 4 reserved cores: about $0.040/hour.
 
-> Fill in the real numbers from `make cost-check` after the lab run.
+First lab run (`make cost-check`, 15 min window, mostly idle after the load test): **$0.0519/hour** under load, $0.040/hour idle, **$0.97 per 1M output tokens** on average, cluster $0.3327/hour with 80% idle. Close to the hand estimate; the per-token figure is higher because the window includes idle minutes, which is what the busy-time number now separates.
 
 ---
 
@@ -168,6 +169,9 @@ A crash-looping model still holds its node. "OOM loop for 12 minutes" becomes "O
 > | Averaging cost per token over snapshots would weight a quiet minute like a busy one | Sum cost and tokens over the window with the same time weights, then divide |
 > | A gap in collection (restart) would count as one very long snapshot | Each snapshot counts for at most 2 minutes |
 > | Idle could go negative when model pods use more than they reserved | Other pods are capped at what's left; idle is never below 0, and model + other + idle always equals the node price (tested) |
+> | The first lab run showed $0.97 per 1M "at 4.2 tokens/s": an average over a window that was mostly idle, so a token looked 3× dearer than it is while serving | Added cost per 1M while busy and the busy share, and the check now labels the average as "idle time included" |
+> | Every `/cost/models` call loaded 7 days of snapshots just to find the peak, which gets slow as history grows | SQLite computes the per-cycle peak (`OutputPeaks`); the API loads only the report window |
+> | The node report listed every pod once per node | `AllNodeRequests` adds up all nodes in one pass |
 > | A typo in the price file (`node:` instead of `nodes:`) would silently price nothing | Strict YAML: unknown keys are errors; rules without a match or price are rejected |
 {.is-danger}
 

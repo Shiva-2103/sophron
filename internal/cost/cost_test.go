@@ -39,7 +39,7 @@ func (n fakeNodes) Nodes() []kube.NodeInfo {
 	}
 	return out
 }
-func (n fakeNodes) NodeRequests(name string) kube.Requests { return n.reqs[name] }
+func (n fakeNodes) AllNodeRequests() map[string]kube.Requests { return n.reqs }
 
 type fakeProm struct{ samples []prom.Sample }
 
@@ -180,6 +180,9 @@ func TestModelReport(t *testing.T) {
 	near(t, "month forecast", *m.MonthForecast, cost*730)
 	near(t, "peak", *m.PeakOutputTokensPerSec, 96)
 	near(t, "capacity used", *m.CapacityUsed, 0.5)
+	// Busy the whole hour, so busy-time cost per token equals the average.
+	near(t, "busy cost per 1M", *m.CostPer1MOutputTokensBusy, *m.CostPer1MOutputTokens)
+	near(t, "busy share", *m.BusyShare, 1)
 
 	if len(m.APIComparison) != 1 {
 		t.Fatalf("api comparison: %+v", m.APIComparison)
@@ -287,4 +290,54 @@ func TestLabPriceFile(t *testing.T) {
 		return
 	}
 	t.Fatal("no ConfigMap with prices.yaml in the collector manifest")
+}
+
+// peakStore is a store that computes peaks itself (the fast path).
+type peakStore struct {
+	memStore
+	sinceAsked []time.Time
+}
+
+func (p *peakStore) Since(ctx context.Context, since time.Time) ([]collector.Snapshot, error) {
+	p.sinceAsked = append(p.sinceAsked, since)
+	return p.memStore.Since(ctx, since)
+}
+
+func (p *peakStore) OutputPeaks(context.Context, time.Time) ([]Peak, error) {
+	return []Peak{{Namespace: "llm", Kind: "Deployment", Name: "llm-server", Max: 120, Cycles: 500}}, nil
+}
+
+func TestModelReportFastPath(t *testing.T) {
+	ps := &peakStore{memStore: memStore{labHour(0.1)}}
+	r := &Reporter{Store: ps, Now: func() time.Time { return t0 }}
+	m, err := r.Models(context.Background(), time.Hour)
+	if err != nil || len(m) != 1 {
+		t.Fatalf("models = %+v, %v", m, err)
+	}
+	if len(ps.sinceAsked) != 1 || !ps.sinceAsked[0].Equal(t0.Add(-time.Hour)) {
+		t.Errorf("should load only the window, asked %v", ps.sinceAsked)
+	}
+	near(t, "peak from SQL", *m[0].PeakOutputTokensPerSec, 120)
+	near(t, "capacity used", *m[0].CapacityUsed, 48.0/120)
+}
+
+func TestBusyCostExcludesIdleTime(t *testing.T) {
+	// 30 minutes busy at 48 tokens/s, then 30 minutes idle, same cost per hour.
+	var snaps []collector.Snapshot
+	for i := 120; i >= 0; i-- {
+		s := collector.Snapshot{Namespace: "llm", Pod: "p", WorkloadKind: "Deployment", WorkloadName: "w",
+			Node: "n", Ready: true, CostPerHour: f(0.06), Time: t0.Add(-time.Duration(i) * 30 * time.Second)}
+		if i > 60 {
+			s.GenerationTokensPerSecond = f(48)
+		} else {
+			s.GenerationTokensPerSecond = f(0)
+		}
+		snaps = append(snaps, s)
+	}
+	r := &Reporter{Store: memStore{snaps}, Now: func() time.Time { return t0 }}
+	m, _ := r.Models(context.Background(), time.Hour)
+	tokens := 48.0 * 1800
+	near(t, "average cost per 1M (idle included)", *m[0].CostPer1MOutputTokens, 0.06/tokens*1e6)
+	near(t, "busy cost per 1M", *m[0].CostPer1MOutputTokensBusy, 0.03/tokens*1e6)
+	near(t, "busy share", *m[0].BusyShare, 0.5)
 }

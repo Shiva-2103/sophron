@@ -27,7 +27,7 @@ const gib = 1 << 30
 type NodeSource interface {
 	Node(name string) (kube.NodeInfo, bool)
 	Nodes() []kube.NodeInfo
-	NodeRequests(name string) kube.Requests
+	AllNodeRequests() map[string]kube.Requests
 }
 
 // NodePrice is one node's hourly price and its split per resource.

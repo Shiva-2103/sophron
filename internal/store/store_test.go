@@ -191,3 +191,38 @@ func TestAlertMarks(t *testing.T) {
 		t.Errorf("empty mark should delete the row, got %+v", m)
 	}
 }
+
+func TestOutputPeaks(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	tok := func(v float64) *float64 { return &v }
+	mk := func(pod string, at time.Time, v float64) collector.Snapshot {
+		return collector.Snapshot{Time: at, Namespace: "llm", Pod: pod, Server: "vllm",
+			WorkloadKind: "Deployment", WorkloadName: "chat", GenerationTokensPerSecond: tok(v)}
+	}
+	// Two pods in one cycle add up (30 + 50 = 80); another cycle has 60.
+	snaps := []collector.Snapshot{mk("a", now.Add(-time.Minute), 30), mk("b", now.Add(-time.Minute), 50), mk("a", now, 60),
+		{Time: now, Namespace: "llm", Pod: "solo", Server: "llamacpp", GenerationTokensPerSecond: tok(5)}}
+	if err := s.Save(ctx, snaps); err != nil {
+		t.Fatal(err)
+	}
+	peaks, err := s.OutputPeaks(ctx, now.Add(-time.Hour))
+	if err != nil || len(peaks) != 2 {
+		t.Fatalf("peaks = %+v, %v", peaks, err)
+	}
+	for _, p := range peaks {
+		switch p.Name {
+		case "chat":
+			if p.Kind != "Deployment" || p.Max != 80 || p.Cycles != 2 {
+				t.Errorf("chat: %+v", p)
+			}
+		case "solo":
+			if p.Kind != "Pod" || p.Max != 5 {
+				t.Errorf("a pod without a workload is its own group: %+v", p)
+			}
+		default:
+			t.Errorf("unexpected %+v", p)
+		}
+	}
+}

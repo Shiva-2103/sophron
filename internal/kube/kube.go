@@ -252,15 +252,21 @@ func (i *Informers) Nodes() []NodeInfo {
 // NodeRequests adds up what running and pending pods on a node reserved.
 // Finished pods (Succeeded, Failed) no longer hold resources.
 func (i *Informers) NodeRequests(node string) Requests {
+	return i.AllNodeRequests()[node]
+}
+
+// AllNodeRequests does NodeRequests for every node in one pass over the pods.
+func (i *Informers) AllNodeRequests() map[string]Requests {
+	out := map[string]Requests{}
 	pods, err := i.pods.List(labels.Everything())
 	if err != nil {
-		return Requests{}
+		return out
 	}
-	var r Requests
 	for _, p := range pods {
-		if p.Spec.NodeName != node || p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
+		if p.Spec.NodeName == "" || p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
 			continue
 		}
+		r := out[p.Spec.NodeName]
 		r.Pods++
 		for _, c := range p.Spec.Containers {
 			if q, ok := c.Resources.Requests[corev1.ResourceCPU]; ok {
@@ -273,8 +279,9 @@ func (i *Informers) NodeRequests(node string) Requests {
 				r.GPUs += q.Value()
 			}
 		}
+		out[p.Spec.NodeName] = r
 	}
-	return r
+	return out
 }
 
 // LastWarning returns the newest warning event for a pod, if any.

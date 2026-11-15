@@ -48,7 +48,9 @@ if [[ -n "$m" ]]; then
                   || bad "model has no cost per hour"
   c1m=$(jq -r '.costPer1MOutputTokens // empty' <<<"$m")
   if [[ -n "$c1m" ]]; then
-    ok "cost per 1M output tokens: \$$(printf '%.3f' "$c1m") at $(printf '%.1f' "$(jq -r '.outputTokensPerSecond // 0' <<<"$m")") tokens/s"
+    ok "cost per 1M output tokens: \$$(printf '%.3f' "$c1m") on average (idle time included)"
+    busy=$(jq -r '.costPer1MOutputTokensBusy // empty' <<<"$m")
+    [[ -n "$busy" ]] && note "while busy: \$$(printf '%.3f' "$busy") per 1M; busy $(jq -n "$(jq -r '.busyShare // 0' <<<"$m")*100|floor")% of the window"
   else
     bad "no cost per 1M tokens (no token metrics in the window?)"
   fi

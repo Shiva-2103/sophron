@@ -9,6 +9,9 @@ import (
 	"github.com/Shiva-2103/sophron/internal/collector"
 )
 
+// busyTokens is the output rate above which a model counts as busy.
+const busyTokens = 0.5
+
 // HoursPerMonth is the average month (365 × 24 / 12), as cloud bills use.
 const HoursPerMonth = 730
 
@@ -19,6 +22,19 @@ const maxGap = 2 * time.Minute
 // SnapshotReader is what reports need from the database.
 type SnapshotReader interface {
 	Since(ctx context.Context, since time.Time) ([]collector.Snapshot, error)
+}
+
+// Peak is a workload's highest output throughput in one cycle.
+type Peak struct {
+	Namespace, Kind, Name string
+	Max                   float64 // output tokens/s, all pods together
+	Cycles                int     // cycles with throughput data
+}
+
+// PeakReader is optional: a store that computes peaks itself saves the
+// reporter from loading days of snapshots.
+type PeakReader interface {
+	OutputPeaks(ctx context.Context, since time.Time) ([]Peak, error)
 }
 
 // Reporter builds the cost reports the API serves.
@@ -47,14 +63,18 @@ type ModelCost struct {
 	Estimate      bool     `json:"estimate"`
 
 	// Over the report window.
-	Window                 string   `json:"window"`
-	Cost                   float64  `json:"cost"` // USD spent in the window
-	OutputTokens           float64  `json:"outputTokens"`
-	InputTokens            float64  `json:"inputTokens"`
-	CostPer1MOutputTokens  *float64 `json:"costPer1MOutputTokens"`
-	CostPer1MTokens        *float64 `json:"costPer1MTokens"` // input + output
-	OutputTokensPerSecond  *float64 `json:"outputTokensPerSecond"`
-	PeakOutputTokensPerSec *float64 `json:"peakOutputTokensPerSecond"`
+	Window                string   `json:"window"`
+	Cost                  float64  `json:"cost"` // USD spent in the window
+	OutputTokens          float64  `json:"outputTokens"`
+	InputTokens           float64  `json:"inputTokens"`
+	CostPer1MOutputTokens *float64 `json:"costPer1MOutputTokens"`
+	CostPer1MTokens       *float64 `json:"costPer1MTokens"` // input + output
+	// Only the time the model was producing tokens: what a token costs when
+	// busy. The gap to CostPer1MOutputTokens is the price of idle time.
+	CostPer1MOutputTokensBusy *float64 `json:"costPer1MOutputTokensBusy"`
+	BusyShare                 *float64 `json:"busyShare"` // share of the window with traffic
+	OutputTokensPerSecond     *float64 `json:"outputTokensPerSecond"`
+	PeakOutputTokensPerSec    *float64 `json:"peakOutputTokensPerSecond"`
 	// Share of the highest throughput seen recently: low = paying for idle
 	// capacity, near 1 = add capacity soon.
 	CapacityUsed *float64 `json:"capacityUsed"`
@@ -125,8 +145,25 @@ func (r *Reporter) Models(ctx context.Context, window time.Duration) ([]ModelCos
 		peakWindow = 7 * 24 * time.Hour
 	}
 	peakWindow = max(peakWindow, window)
-	all, err := r.Store.Since(ctx, now.Add(-peakWindow))
-	if err != nil {
+	var (
+		all   []collector.Snapshot
+		peaks map[workloadKey]Peak
+		err   error
+	)
+	if pr, ok := r.Store.(PeakReader); ok {
+		// Fast path: only the window's snapshots; peaks come from SQL.
+		if all, err = r.Store.Since(ctx, now.Add(-window)); err != nil {
+			return nil, err
+		}
+		list, err := pr.OutputPeaks(ctx, now.Add(-peakWindow))
+		if err != nil {
+			return nil, err
+		}
+		peaks = map[workloadKey]Peak{}
+		for _, p := range list {
+			peaks[workloadKey{p.Namespace, p.Kind, p.Name}] = p
+		}
+	} else if all, err = r.Store.Since(ctx, now.Add(-peakWindow)); err != nil {
 		return nil, err
 	}
 	groups := map[workloadKey][]collector.Snapshot{}
@@ -135,7 +172,11 @@ func (r *Reporter) Models(ctx context.Context, window time.Duration) ([]ModelCos
 	}
 	var out []ModelCost
 	for k, snaps := range groups {
-		m := r.model(k, snaps, now, window)
+		var pk *Peak
+		if p, ok := peaks[k]; ok {
+			pk = &p
+		}
+		m := r.model(k, snaps, now, window, pk)
 		if m.Pods == 0 && m.Cost == 0 {
 			continue // gone before the window started
 		}
@@ -147,7 +188,7 @@ func (r *Reporter) Models(ctx context.Context, window time.Duration) ([]ModelCos
 	return out, nil
 }
 
-func (r *Reporter) model(k workloadKey, snaps []collector.Snapshot, now time.Time, window time.Duration) ModelCost {
+func (r *Reporter) model(k workloadKey, snaps []collector.Snapshot, now time.Time, window time.Duration, pk *Peak) ModelCost {
 	m := ModelCost{Namespace: k.ns, WorkloadKind: k.kind, Workload: k.name, Window: window.String()}
 	w := weights(snaps, now)
 	start := now.Add(-window)
@@ -165,7 +206,7 @@ func (r *Reporter) model(k workloadKey, snaps []collector.Snapshot, now time.Tim
 	}
 
 	sources := map[string]bool{}
-	var covered, tokenSeconds float64
+	var covered, tokenSeconds, busyCost, busySeconds float64
 	for i, s := range snaps {
 		if s.Time.Equal(latest) {
 			m.Pods++
@@ -192,6 +233,10 @@ func (r *Reporter) model(k workloadKey, snaps []collector.Snapshot, now time.Tim
 		if s.GenerationTokensPerSecond != nil {
 			m.OutputTokens += *s.GenerationTokensPerSecond * w[i]
 			tokenSeconds += w[i]
+			if *s.GenerationTokensPerSecond >= busyTokens && s.CostPerHour != nil {
+				busyCost += *s.CostPerHour * w[i] / 3600
+				busySeconds += w[i]
+			}
 		}
 		if s.PromptTokensPerSecond != nil {
 			m.InputTokens += *s.PromptTokensPerSecond * w[i]
@@ -221,11 +266,21 @@ func (r *Reporter) model(k workloadKey, snaps []collector.Snapshot, now time.Tim
 	if tokenSeconds > 0 {
 		v := m.OutputTokens / tokenSeconds
 		m.OutputTokensPerSecond = &v
+		b := busySeconds / tokenSeconds
+		m.BusyShare = &b
+	}
+	if m.OutputTokens > 0 && busyCost > 0 {
+		v := busyCost / m.OutputTokens * 1e6
+		m.CostPer1MOutputTokensBusy = &v
 	}
 
 	var peak float64
+	cycles := len(perCycle)
 	for _, v := range perCycle {
 		peak = max(peak, v)
+	}
+	if pk != nil {
+		peak, cycles = max(peak, pk.Max), max(cycles, pk.Cycles)
 	}
 	if peak > 0 {
 		m.PeakOutputTokensPerSec = &peak
@@ -234,7 +289,7 @@ func (r *Reporter) model(k workloadKey, snaps []collector.Snapshot, now time.Tim
 			m.CapacityUsed = &v
 		}
 	}
-	if len(perCycle) < 10 {
+	if cycles < 10 {
 		m.Notes = append(m.Notes, "few throughput samples yet; the peak (and capacity used) will settle as history builds up")
 	}
 	if tokenSeconds == 0 {
@@ -286,12 +341,13 @@ func (r *Reporter) Nodes(ctx context.Context) ([]NodeCost, error) {
 		return nil, err
 	}
 	latest := latestPerPod(recent)
+	allReqs := r.Pricer.Nodes.AllNodeRequests()
 	var out []NodeCost
 	for _, n := range r.Pricer.Nodes.Nodes() {
 		np := r.Pricer.NodePrice(ctx, n)
 		nc := NodeCost{NodePrice: np, InstanceType: n.InstanceType, CapacityType: n.CapacityType,
 			MonthForecast: np.Hourly * HoursPerMonth}
-		req := r.Pricer.Nodes.NodeRequests(n.Name)
+		req := allReqs[n.Name]
 		for _, s := range latest {
 			if s.Node != n.Name {
 				continue
