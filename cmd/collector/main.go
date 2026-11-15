@@ -22,15 +22,18 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/Shiva-2103/sophron/internal/api"
+	"github.com/Shiva-2103/sophron/internal/auth"
 	"github.com/Shiva-2103/sophron/internal/collector"
 	"github.com/Shiva-2103/sophron/internal/config"
 	"github.com/Shiva-2103/sophron/internal/cost"
+	"github.com/Shiva-2103/sophron/internal/fixes"
 	"github.com/Shiva-2103/sophron/internal/kube"
 	"github.com/Shiva-2103/sophron/internal/mapping"
 	"github.com/Shiva-2103/sophron/internal/notify"
 	"github.com/Shiva-2103/sophron/internal/prom"
 	"github.com/Shiva-2103/sophron/internal/rules"
 	"github.com/Shiva-2103/sophron/internal/store"
+	"github.com/Shiva-2103/sophron/internal/web"
 )
 
 func main() {
@@ -111,10 +114,38 @@ func run() error {
 		log.Info("cost engine on", "priceRules", len(prices.Nodes), "referenceAPIs", len(prices.ReferenceAPIs))
 	}
 
+	authn, err := auth.New(auth.Config{AdminPasswordFile: cfg.AdminPasswordFile, ViewerPasswordFile: cfg.ViewerPasswordFile})
+	if err != nil {
+		return err
+	}
+	apiSrv.Auth, apiSrv.ClusterName, apiSrv.UI = authn, cfg.ClusterName, web.FS()
+	apiSrv.AuditReader, apiSrv.AuditWriter = db, db
+	if !authn.Enabled() {
+		log.Warn("no admin password set: the dashboard is read-only and fixes can't be approved")
+	}
+
+	var manager *fixes.Manager
+	var policy fixes.Policy
+	if cfg.Fixes {
+		policy, err = fixes.LoadPolicy(cfg.PolicyFile)
+		if err != nil {
+			return err
+		}
+		manager = &fixes.Manager{Store: db, Policy: policy, Log: log,
+			Applier: fixes.KubeApplier{Client: clientset, MaxReplicas: policy.MaxReplicas}}
+		apiSrv.FixReader, apiSrv.FixDecider = db, manager
+		log.Info("fixes on", "default", policy.Default, "namespaces", policy.Namespaces)
+	}
+	apiSrv.Setup = doctor(cfg, promClient, c, db, clientset, authn, slack, policy)
+
 	if cfg.Rules {
 		rc := rules.DefaultConfig()
 		rc.PendingAfter, rc.RolloutStuckAfter, rc.SlowStartAfter = cfg.PendingAfter, cfg.RolloutStuckAfter, cfg.SlowStartAfter
 		notifiers := []rules.Notifier{rules.LogNotifier{Log: log}}
+		if manager != nil {
+			// First, so the fix request exists before the alerts go out.
+			notifiers = append([]rules.Notifier{manager}, notifiers...)
+		}
 		if slack != nil {
 			go slack.Start(ctx)
 			notifiers = append(notifiers, slack)
@@ -127,6 +158,9 @@ func run() error {
 			Notifiers:    notifiers,
 			Changes:      kube.Changes{Client: clientset},
 			ResolveAfter: cfg.ResolveAfter,
+		}
+		if manager != nil {
+			engine.Approvals = manager
 		}
 		c.AfterCycle = func(ctx context.Context, snaps []collector.Snapshot) {
 			st, err := engine.Process(ctx, snaps)
@@ -179,6 +213,7 @@ func newSlack(cfg *config.Config, log *slog.Logger) (*notify.Slack, error) {
 		MinSeverity: rules.Severity(strings.ToLower(cfg.SlackMinSeverity)),
 		Location:    loc,
 		Cooldown:    cfg.SlackCooldown,
+		Dashboard:   cfg.DashboardURL,
 	}, log)
 }
 

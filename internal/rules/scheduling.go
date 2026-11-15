@@ -192,6 +192,8 @@ func detectRolloutStuck(in Input) []Finding {
 				fmt.Sprintf("To go back to the old version: kubectl -n %s rollout undo %s", s.Namespace, kubectlTarget(s)),
 			},
 		}
+		undo := actionFor(s, ActionRolloutUndo, "", fmt.Sprintf("Roll %s back to the version that is still serving", name(s)))
+		fix.Action = undo
 		switch {
 		case unscheduled(s):
 			cause, _ := schedulingProblem(s)
@@ -210,6 +212,7 @@ func detectRolloutStuck(in Input) []Finding {
 						"Or add capacity so both fit during the rollout.",
 					},
 					Snippet: "spec:\n  strategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxSurge: 0\n      maxUnavailable: 1",
+					Action:  undo,
 				}
 			}
 		case s.WaitingReason != "":

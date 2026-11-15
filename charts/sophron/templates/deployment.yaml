@@ -1,0 +1,111 @@
+{{- if .Values.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sophron.fullname" . }}-data
+  labels: {{- include "sophron.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sophron.fullname" . }}
+  labels: {{- include "sophron.labels" . | nindent 4 }}
+spec:
+  replicas: 1                 # one writer to the SQLite file
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "sophron.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "sophron.selector" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "sophron.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sophron
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --prometheus-url={{ .Values.prometheus.url }}
+            - --interval={{ .Values.interval }}
+            - --retention={{ .Values.retention }}
+            - --db=/data/sophron.db
+          env:
+            - { name: SOPHRON_CLUSTER_NAME, value: {{ .Values.clusterName | quote }} }
+            - { name: SOPHRON_TIMEZONE, value: {{ .Values.timezone | quote }} }
+            - { name: SOPHRON_PRICING_FILE, value: /etc/sophron/config/prices.yaml }
+            - { name: SOPHRON_POLICY_FILE, value: /etc/sophron/config/policy.yaml }
+            - { name: SOPHRON_SLACK_WEBHOOK_FILE, value: /etc/sophron/slack/webhook-url }
+            - { name: SOPHRON_SLACK_MIN_SEVERITY, value: {{ .Values.slack.minSeverity | quote }} }
+            - { name: SOPHRON_DASHBOARD_URL, value: {{ .Values.dashboardURL | quote }} }
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /etc/sophron/config, readOnly: true }
+            - { name: admin, mountPath: /etc/sophron/admin, readOnly: true }
+            - { name: slack, mountPath: /etc/sophron/slack, readOnly: true }
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "sophron.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "sophron.fullname" . }}-config
+        - name: admin
+          secret:
+            secretName: {{ include "sophron.authSecret" . }}
+            optional: true
+            defaultMode: 0440
+        - name: slack
+          secret:
+            secretName: {{ default "sophron-slack" .Values.slack.existingSecret }}
+            optional: true
+            defaultMode: 0440
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sophron.fullname" . }}
+  labels: {{- include "sophron.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector: {{- include "sophron.selector" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

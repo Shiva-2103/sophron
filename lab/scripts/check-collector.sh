@@ -2,6 +2,7 @@
 # Checks the Phase 2 "done when" list and prints PASS/FAIL for each item.
 # Run after `make collector-up`. Run `make lab-load` first to see token rates.
 set -uo pipefail
+source "$(dirname "$0")/auth.sh"
 
 pass=0; fail=0
 ok()  { printf '  \033[32mPASS\033[0m  %s\n' "$*"; pass=$((pass + 1)); }
@@ -37,7 +38,7 @@ else
 fi
 
 # 4. Last cycle succeeded and found the model pod
-status=$(curl -fsS "http://127.0.0.1:$port/api/v1/status" 2>/dev/null)
+status=$(curl -fsS "${AUTH[@]}" "http://127.0.0.1:$port/api/v1/status" 2>/dev/null)
 pods=$(jq -r '.pods // 0' <<<"$status" 2>/dev/null)
 err=$(jq -r '.error // ""' <<<"$status" 2>/dev/null)
 qerr=$(jq -r '.queryErrors // 0' <<<"$status" 2>/dev/null)
@@ -48,7 +49,7 @@ else
 fi
 
 # 5. Snapshot joins Kubernetes and Prometheus data
-snap=$(curl -fsS "http://127.0.0.1:$port/api/v1/snapshots/latest" 2>/dev/null | jq '[.[] | select(.namespace=="llm")][0] // empty')
+snap=$(curl -fsS "${AUTH[@]}" "http://127.0.0.1:$port/api/v1/snapshots/latest" 2>/dev/null | jq '[.[] | select(.namespace=="llm")][0] // empty')
 if [[ -n "$snap" ]]; then
   ok "snapshot stored for $(jq -r '.namespace + "/" + .pod' <<<"$snap") (server: $(jq -r .server <<<"$snap"))"
   node=$(jq -r '.node // ""' <<<"$snap"); provider=$(jq -r '.nodeProvider // ""' <<<"$snap")

@@ -10,10 +10,10 @@ MON_NS       := monitoring
 MON_RELEASE  := monitoring
 IMAGE        ?= sophron-collector:dev
 
-.PHONY: help build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
+.PHONY: help admin-password dashboard dashboard-stop demo doctor fixes e2e-check savings cost cost-models cost-nodes cost-check slack-secret slack-test slack-off build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
 
 help: ## List available commands
-	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z0-9_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 ##@ Go
 build: ## Build the collector binary into bin/
@@ -86,6 +86,31 @@ cost-nodes: ## Each node: price, model pods, other pods, idle
 
 cost-check: ## Phase 4 check: send load, verify prices and cost per token (~3 min)
 	@bash $(LAB_DIR)/scripts/check-cost.sh
+
+savings: ## Savings suggestions from the last 7 days
+	@bash $(LAB_DIR)/scripts/api.sh /api/v1/savings
+
+##@ Dashboard and fixes (Phase 5/6)
+admin-password: ## Create the dashboard admin and viewer passwords (once) and print them
+	@bash $(LAB_DIR)/scripts/dashboard.sh password
+
+dashboard: ## Serve the dashboard on port 8081 (prints the SSM port-forward for your laptop)
+	@bash $(LAB_DIR)/scripts/dashboard.sh start
+
+dashboard-stop: ## Stop serving the dashboard
+	@bash $(LAB_DIR)/scripts/dashboard.sh stop
+
+demo: ## Run the dashboard on sample data, no cluster needed (http://localhost:8090)
+	go run ./hack/demo
+
+doctor: ## Check Sophron's setup: data sources, prices, Slack, login, fix permissions
+	@bash $(LAB_DIR)/scripts/api.sh /api/v1/setup
+
+fixes: ## Fix requests and their status
+	@bash $(LAB_DIR)/scripts/api.sh '/api/v1/fixes?status=all'
+
+e2e-check: ## The whole loop: break, alert, approve, fixed, receipt (~5-15 min)
+	@bash $(LAB_DIR)/scripts/check-e2e.sh
 
 ##@ Slack
 slack-secret: ## Save the Slack webhook URL as a Kubernetes Secret (hidden prompt)

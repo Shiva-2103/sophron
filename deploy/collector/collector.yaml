@@ -67,6 +67,55 @@ data:
         inputPer1M: 0.50
         outputPer1M: 1.50
 ---
+# What fixes Sophron may apply, and where. A fix the policy allows still
+# waits for an admin's approval unless its mode is "auto".
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sophron-policy
+  namespace: sophron-system
+data:
+  policy.yaml: |
+    default: approve        # auto | approve | never
+    namespaces: [llm]       # the only namespace Sophron may change
+    maxReplicas: 2          # scale-up never goes above this
+    actions:
+      rollout-restart: approve
+      rollout-undo: approve
+      set-memory-limit: approve
+      scale-up: approve
+---
+# The fixer's permissions: only in the llm namespace, only workloads.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sophron-fixer
+  namespace: llm
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sophron-fixer
+  namespace: llm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sophron-fixer
+subjects:
+  - kind: ServiceAccount
+    name: sophron-collector
+    namespace: sophron-system
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -122,6 +171,10 @@ spec:
             # sophron-slack Secret (make slack-secret), mounted as a file
             # rather than an env var, so it doesn't show in the process
             # environment. No Secret: Slack is off.
+            - name: SOPHRON_POLICY_FILE
+              value: /etc/sophron/policy/policy.yaml
+            - name: SOPHRON_DASHBOARD_URL
+              value: http://localhost:8081
             - name: SOPHRON_PRICING_FILE
               value: /etc/sophron/pricing/prices.yaml
             - name: SOPHRON_SLACK_WEBHOOK_FILE
@@ -152,6 +205,12 @@ spec:
             - name: pricing
               mountPath: /etc/sophron/pricing
               readOnly: true
+            - name: policy
+              mountPath: /etc/sophron/policy
+              readOnly: true
+            - name: admin
+              mountPath: /etc/sophron/admin
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -159,6 +218,15 @@ spec:
         - name: pricing
           configMap:
             name: sophron-pricing
+        - name: policy
+          configMap:
+            name: sophron-policy
+        # Dashboard passwords (make admin-password). Missing: read-only.
+        - name: admin
+          secret:
+            secretName: sophron-admin
+            optional: true
+            defaultMode: 0440
         - name: slack
           secret:
             secretName: sophron-slack

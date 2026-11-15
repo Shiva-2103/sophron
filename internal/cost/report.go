@@ -444,3 +444,51 @@ func (r *Reporter) Summary(ctx context.Context, window time.Duration) (Summary, 
 	}
 	return s, nil
 }
+
+// TrendPoint is one bucket of the cost trend.
+type TrendPoint struct {
+	Time                  time.Time `json:"time"`
+	ModelCost             float64   `json:"modelCost"` // USD spent by models in the bucket
+	OutputTokens          float64   `json:"outputTokens"`
+	CostPer1MOutputTokens *float64  `json:"costPer1MOutputTokens"`
+}
+
+// Trend buckets model cost and tokens over the window: hourly up to two
+// days, daily beyond.
+func (r *Reporter) Trend(ctx context.Context, window time.Duration) ([]TrendPoint, error) {
+	now := r.now()
+	bucket := time.Hour
+	if window > 48*time.Hour {
+		bucket = 24 * time.Hour
+	}
+	snaps, err := r.Store.Since(ctx, now.Add(-window))
+	if err != nil {
+		return nil, err
+	}
+	w := weights(snaps, now)
+	start := now.Add(-window).Truncate(bucket)
+	n := int(now.Sub(start)/bucket) + 1
+	out := make([]TrendPoint, n)
+	for i := range out {
+		out[i].Time = start.Add(time.Duration(i) * bucket)
+	}
+	for i, s := range snaps {
+		b := int(s.Time.Sub(start) / bucket)
+		if b < 0 || b >= n {
+			continue
+		}
+		if s.CostPerHour != nil {
+			out[b].ModelCost += *s.CostPerHour * w[i] / 3600
+		}
+		if s.GenerationTokensPerSecond != nil {
+			out[b].OutputTokens += *s.GenerationTokensPerSecond * w[i]
+		}
+	}
+	for i := range out {
+		if out[i].OutputTokens > 0 {
+			v := out[i].ModelCost / out[i].OutputTokens * 1e6
+			out[i].CostPer1MOutputTokens = &v
+		}
+	}
+	return out, nil
+}

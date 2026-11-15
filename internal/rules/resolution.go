@@ -84,6 +84,11 @@ func downtime(f Finding, snaps []collector.Snapshot) (float64, *float64) {
 	return secs, &cost
 }
 
+// Approvals tells who approved the fix Sophron applied for a finding.
+type Approvals interface {
+	ApprovedFor(ctx context.Context, findingID int64) (by string, at time.Time, ok bool)
+}
+
 // ChangeFinder looks up who last changed a workload's spec. Optional: without
 // it, resolutions still say what changed, just not with which tool.
 type ChangeFinder interface {

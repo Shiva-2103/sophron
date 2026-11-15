@@ -125,3 +125,27 @@ func TestEngineLifecycle(t *testing.T) {
 		t.Fatalf("want a second finding row, got %d", len(store.findings))
 	}
 }
+
+func TestActionChangedEvent(t *testing.T) {
+	clock := now
+	var report []Finding
+	rec := &recorder{}
+	e := &Engine{Store: &memStore{findings: map[int64]*Finding{}}, Config: DefaultConfig(), Notifiers: []Notifier{rec},
+		Detectors: []Detector{fixedDetector{&report}}, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ResolveAfter: time.Minute, Now: func() time.Time { return clock }}
+	act := func(v string) *Action { return &Action{Kind: ActionSetMemoryLimit, Value: v, Container: "c"} }
+	report = []Finding{{Namespace: "llm", WorkloadName: "w", Severity: Critical, Title: "x", Fix: Fix{Action: act("768Mi")}}}
+	_, _ = e.Process(context.Background(), nil)
+	clock = clock.Add(30 * time.Second)
+	_, _ = e.Process(context.Background(), nil) // same action: nothing
+	report[0].Fix.Action = act("1152Mi")
+	clock = clock.Add(30 * time.Second)
+	_, _ = e.Process(context.Background(), nil)
+	var types []string
+	for _, ev := range rec.events {
+		types = append(types, ev.Type)
+	}
+	if len(types) != 2 || types[1] != EventActionChanged {
+		t.Errorf("events = %v, want opened then action-changed", types)
+	}
+}

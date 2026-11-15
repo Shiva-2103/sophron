@@ -135,6 +135,19 @@ make cost-nodes       # per node: price, model pods, other pods, idle
 
 The lab's price lives in the `sophron-pricing` ConfigMap in `deploy/collector/collector.yaml`: the EC2 price split over the three kind nodes. Edit `referenceAPIs` there to compare with APIs you know the prices of.
 
+## 11. Open the dashboard and approve a fix
+
+```bash
+git pull && make collector-up   # rebuild with the dashboard, fixes and policy
+make admin-password             # once: prints the admin and viewer passwords
+make dashboard                  # serves it on port 8081, prints the SSM command for your laptop
+make e2e-check                  # break → alert → approve → fixed → receipt (~5-15 min)
+```
+
+On your laptop, run the `aws ssm start-session ... AWS-StartPortForwardingSession` command it prints, then open http://localhost:8081.
+
+No cluster? `make demo` runs the same dashboard on sample data at http://localhost:8090 (admin / demo-password-1).
+
 ## Commands
 
 | Command | Does |
@@ -153,6 +166,8 @@ The lab's price lives in the `sophron-pricing` ConfigMap in `deploy/collector/co
 | `make chaos SCENARIO=...` / `chaos-reset` | Break the model server on purpose / undo |
 | `make rules-check` | Phase 3 check, all scenarios |
 | `make cost` / `cost-models` / `cost-nodes` / `cost-check` | What it costs; Phase 4 check |
+| `make admin-password` / `dashboard` / `dashboard-stop` | Dashboard logins / serve it on 8081 / stop |
+| `make doctor` / `savings` / `fixes` / `e2e-check` | Setup checks / savings / fix requests / the full loop |
 | `make slack-secret` / `slack-test` / `slack-off` | Store the Slack webhook / send a sample alert / stop alerts |
 
 ## Save money

@@ -43,6 +43,7 @@ type PodInfo struct {
 	ServerLabel           string // value of sophron.dev/model-server, if set
 	WorkloadKind          string // Deployment, StatefulSet, ...
 	WorkloadName          string
+	Container             string // the container that last failed, else the first one
 	Revision              string // pod-template-hash or controller-revision-hash
 	Phase                 string
 	Ready                 bool
@@ -321,7 +322,11 @@ func PodInfoFrom(p *corev1.Pod) PodInfo {
 		}
 		if t := cs.LastTerminationState.Terminated; t != nil && t.Reason != "" && info.LastTerminationReason == "" {
 			info.LastTerminationReason = t.Reason
+			info.Container = cs.Name
 		}
+	}
+	if info.Container == "" && len(p.Spec.Containers) > 0 {
+		info.Container = p.Spec.Containers[0].Name
 	}
 	for _, c := range p.Spec.Containers {
 		if q, ok := c.Resources.Requests[corev1.ResourceCPU]; ok {

@@ -68,8 +68,9 @@ Weeks 10 to 12. What it costs and where it should run.
 - [x] Idle cost per node; model + other pods + idle = node price
 - [x] Down cost on resolved findings and in Slack
 - [x] Self-hosted vs API comparison and break-even (APIs you choose)
-- [ ] `make cost-check` passes in the lab
-- [ ] Savings suggestions: right-size, node fit, checked by hand for 3 models
+- [x] `make cost-check` passes in the lab (5 of 5)
+- [x] Savings suggestions: right-size, idle model, idle node, cheaper node fit (`make savings`)
+- [ ] Savings checked by hand for 3 models in the lab
 
 Learn: Kubernetes FinOps, GPU memory math, quantization
 
@@ -77,9 +78,11 @@ Learn: Kubernetes FinOps, GPU memory math, quantization
 
 Weeks 13 to 16. Something strangers can install.
 
-- [ ] `helm install` works with no settings
-- [ ] `sophron doctor` explains anything missing
-- [ ] Dashboard: overview, cost, endpoints, problems, setup health
+- [x] Dashboard: overview, models, problems, approvals, cost, activity, setup; light and dark (`make dashboard`, `make demo`)
+- [x] Sign-in with admin and viewer roles
+- [x] Helm chart (`charts/sophron`), linted and rendered in CI
+- [x] Doctor: setup checks with the fix for each (`make doctor`, Setup page)
+- [ ] `helm install` tested on a fresh cluster (needs a published image)
 - [ ] Release v0.1.0 and share it
 - [ ] 10 people outside us have tried it
 
@@ -89,10 +92,13 @@ Learn: Helm chart design, releases, building in public
 
 Weeks 17 to 20. Fix things with a human in the loop.
 
-- [ ] `RemediationPolicy` with auto, approve and never
-- [ ] Approve or reject from Slack and the dashboard
-- [ ] Audit log page
-- [ ] A "never" action can't run, whatever happens
+- [x] Policy with auto, approve and never, per action and namespace
+- [x] Approve or deny from the dashboard (Slack links to it)
+- [ ] Approve or deny inside Slack (needs Slack Socket Mode)
+- [x] Audit log page, hash-chained
+- [x] A "never" action can't run, whatever happens (tested)
+- [x] Follow-up steps when a fix isn't enough
+- [ ] `make e2e-check` passes in the lab
 
 Learn: operators, custom resources, safe automation
 

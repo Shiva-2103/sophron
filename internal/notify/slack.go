@@ -32,6 +32,8 @@ type SlackConfig struct {
 	// A problem that comes back within this long of its last alert is not
 	// alerted again (its "resolved" is skipped too). Default: 10m.
 	Cooldown time.Duration
+	// Dashboard address, for "approve it here" links. Optional.
+	Dashboard string
 }
 
 // Slack sends findings to a Slack channel through an incoming webhook.
@@ -196,6 +198,8 @@ func (s *Slack) wanted(e rules.Event) bool {
 			delete(s.muted, f.Key)
 			return false
 		}
+	default:
+		return false // e.g. action-changed: not worth a message
 	}
 	return true
 }

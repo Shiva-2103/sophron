@@ -5,10 +5,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/Shiva-2103/sophron/internal/auth"
 	"github.com/Shiva-2103/sophron/internal/collector"
 	"github.com/Shiva-2103/sophron/internal/cost"
 	"github.com/Shiva-2103/sophron/internal/rules"
@@ -19,6 +21,8 @@ type CostReader interface {
 	Models(ctx context.Context, window time.Duration) ([]cost.ModelCost, error)
 	Nodes(ctx context.Context) ([]cost.NodeCost, error)
 	Summary(ctx context.Context, window time.Duration) (cost.Summary, error)
+	Savings(ctx context.Context, window time.Duration) ([]cost.Saving, error)
+	Trend(ctx context.Context, window time.Duration) ([]cost.TrendPoint, error)
 }
 
 // FindingsReader is the part of the store the findings API needs.
@@ -47,6 +51,16 @@ type Server struct {
 
 	// Cost engine (optional).
 	Cost CostReader
+
+	// Dashboard, login and approvals (all optional).
+	Auth        *auth.Auth
+	ClusterName string
+	FixReader   FixReader
+	FixDecider  FixDecider
+	AuditReader AuditReader
+	AuditWriter AuditWriter
+	Setup       func(ctx context.Context) []Check
+	UI          fs.FS
 }
 
 // Handler returns the HTTP routes.
@@ -109,7 +123,8 @@ func (s *Server) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, out)
 	})
-	return mux
+	s.routes(mux)
+	return s.middleware(mux)
 }
 
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {

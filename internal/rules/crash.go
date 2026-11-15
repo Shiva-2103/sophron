@@ -75,6 +75,10 @@ func oomFix(s collector.Snapshot, peakMem float64) Fix {
 		q := memQuantity(want)
 		fix.Steps = append([]string{fmt.Sprintf("Raise the memory limit from %s to about %s, and check the node has that much free.", humanBytes(s.MemoryLimitBytes), q)}, steps...)
 		fix.Snippet = fmt.Sprintf("resources:\n  limits:\n    memory: %s", q)
+		if s.Container != "" {
+			fix.Action = actionFor(s, ActionSetMemoryLimit, q,
+				fmt.Sprintf("Raise the memory limit of %s from %s to %s", s.Container, memQuantity(s.MemoryLimitBytes), q))
+		}
 	} else {
 		fix.Steps = append([]string{"No memory limit is set, so the whole node ran out of memory. Set requests.memory to what the model really needs, so it lands on a node with room."}, steps...)
 	}

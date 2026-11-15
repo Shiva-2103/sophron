@@ -1,0 +1,9 @@
+apiVersion: v2
+name: sophron
+description: "Prudent operations for self-hosted LLMs on Kubernetes: cost, problems and approved fixes"
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/Shiva-2103/sophron
+license: Apache-2.0
+keywords: [llm, vllm, llama.cpp, finops, sre, kubernetes]

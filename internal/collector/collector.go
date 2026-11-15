@@ -210,7 +210,7 @@ func (c *Collector) CollectOnce(ctx context.Context) ([]Snapshot, error) {
 func (c *Collector) build(now time.Time, server string, p kube.PodInfo, m podMetrics) Snapshot {
 	s := Snapshot{
 		Time: now, Namespace: p.Key.Namespace, Pod: p.Key.Name, Server: server,
-		WorkloadKind: p.WorkloadKind, WorkloadName: p.WorkloadName, Revision: p.Revision,
+		WorkloadKind: p.WorkloadKind, WorkloadName: p.WorkloadName, Revision: p.Revision, Container: p.Container,
 		CreatedAt: p.CreatedAt, StartedAt: p.StartedAt, ReadyAt: p.ReadyAt,
 		Phase: p.Phase, Ready: p.Ready, Restarts: p.Restarts,
 		WaitingReason: p.WaitingReason, LastTerminationReason: p.LastTerminationReason,

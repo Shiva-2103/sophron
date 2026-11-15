@@ -25,6 +25,10 @@ const (
 	EventOpened   = "opened"
 	EventResolved = "resolved"
 	EventEscalate = "escalated" // severity went up
+	// The suggested action changed while the finding stayed open, e.g. a
+	// fix was applied but the problem is still there and needs a bigger step.
+	// Alerts ignore it; the fixes manager proposes the new action.
+	EventActionChanged = "action-changed"
 )
 
 // Event is something a person may want to hear about.
@@ -47,7 +51,9 @@ type Engine struct {
 	Notifiers []Notifier
 	// Optional: finds which tool last changed a workload, for resolutions.
 	Changes ChangeFinder
-	Log     *slog.Logger
+	// Optional: who approved the fix for a finding (the fixes manager).
+	Approvals Approvals
+	Log       *slog.Logger
 	// A finding is resolved once it hasn't been seen for this long.
 	// Waiting a little avoids open/resolve/open flapping.
 	ResolveAfter time.Duration
@@ -135,6 +141,9 @@ func (e *Engine) process(ctx context.Context, latest []collector.Snapshot) (Stat
 			if f.Severity.Rank() > cur.Severity.Rank() {
 				e.notify(ctx, Event{Type: EventEscalate, Finding: f})
 			}
+			if f.Fix.Action != nil && !sameAction(f.Fix.Action, cur.Fix.Action) {
+				e.notify(ctx, Event{Type: EventActionChanged, Finding: f})
+			}
 			continue
 		}
 		f.FirstSeen, f.Status = now, StatusOpen
@@ -174,6 +183,11 @@ func (e *Engine) process(ctx context.Context, latest []collector.Snapshot) (Stat
 func (e *Engine) resolution(ctx context.Context, f Finding, in Input) Resolution {
 	r := explainResolution(f, in)
 	r.DownSeconds, r.DownCost = downtime(f, e.findingSnapshots(ctx, f, in))
+	if e.Approvals != nil {
+		if by, _, ok := e.Approvals.ApprovedFor(ctx, f.ID); ok {
+			r.ApprovedBy = by
+		}
+	}
 	if e.Changes == nil || f.WorkloadName == "" {
 		return r
 	}
@@ -189,6 +203,13 @@ func (e *Engine) resolution(ctx context.Context, f Finding, in Input) Resolution
 		r.ChangedBy, r.ChangedAt = FriendlyManager(manager), at
 	}
 	return r
+}
+
+func sameAction(a, b *Action) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Kind == b.Kind && a.Value == b.Value && a.Container == b.Container
 }
 
 // findingSnapshots returns snapshots covering the finding's whole life:

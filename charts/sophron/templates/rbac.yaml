@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "sophron.fullname" . }}
+  labels: {{- include "sophron.labels" . | nindent 4 }}
+---
+# Read-only, cluster wide: what Sophron needs to see.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "sophron.fullname" . }}
+  labels: {{- include "sophron.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "sophron.fullname" . }}
+  labels: {{- include "sophron.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "sophron.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "sophron.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- range .Values.policy.namespaces }}
+{{- if ne . "*" }}
+---
+# Write access only where the policy allows fixes, only to workloads.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "sophron.fullname" $ }}-fixer
+  namespace: {{ . }}
+  labels: {{- include "sophron.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "sophron.fullname" $ }}-fixer
+  namespace: {{ . }}
+  labels: {{- include "sophron.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "sophron.fullname" $ }}-fixer
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "sophron.fullname" $ }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- end }}

@@ -6,6 +6,8 @@ package rules
 
 import (
 	"time"
+
+	"github.com/Shiva-2103/sophron/internal/collector"
 )
 
 // Severity says how urgent a finding is.
@@ -44,6 +46,39 @@ type Fix struct {
 	Steps   []string `json:"steps"`
 	// Optional YAML or command to copy, already filled in with real values.
 	Snippet string `json:"snippet,omitempty"`
+	// Optional change Sophron can make itself, after the policy and a
+	// person allow it.
+	Action *Action `json:"action,omitempty"`
+}
+
+// Action kinds Sophron knows how to apply.
+const (
+	ActionSetMemoryLimit = "set-memory-limit"
+	ActionRolloutUndo    = "rollout-undo"
+	ActionScaleUp        = "scale-up"
+	ActionRestart        = "rollout-restart"
+)
+
+// Action is one concrete change to a workload.
+type Action struct {
+	Kind         string `json:"kind"`
+	Namespace    string `json:"namespace"`
+	WorkloadKind string `json:"workloadKind"`
+	WorkloadName string `json:"workloadName"`
+	Container    string `json:"container,omitempty"`
+	Value        string `json:"value,omitempty"` // e.g. "768Mi"
+	// One line a person approves, e.g. "Raise the memory limit of llama-server to 768Mi".
+	Summary string `json:"summary"`
+}
+
+// actionFor fills in the target from a snapshot. Only workloads can be
+// changed: a bare pod is gone once it is replaced.
+func actionFor(s collector.Snapshot, kind, value, summary string) *Action {
+	if s.WorkloadKind != "Deployment" && s.WorkloadKind != "StatefulSet" {
+		return nil
+	}
+	return &Action{Kind: kind, Namespace: s.Namespace, WorkloadKind: s.WorkloadKind, WorkloadName: s.WorkloadName,
+		Container: s.Container, Value: value, Summary: summary}
 }
 
 // Finding is one problem Sophron noticed.

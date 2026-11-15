@@ -1,0 +1,64 @@
+# Sophron: one pod that collects, detects, prices, alerts, serves the
+# dashboard, and (only after approval) applies fixes.
+
+image:
+  repository: ghcr.io/shiva-2103/sophron-collector
+  tag: ""                 # default: the chart's appVersion
+  pullPolicy: IfNotPresent
+
+clusterName: kubernetes   # shown in alerts and the dashboard
+timezone: UTC             # e.g. Asia/Kolkata; UTC is always shown too
+
+prometheus:
+  url: http://prometheus-operated.monitoring.svc:9090
+
+interval: 30s             # how often to collect
+retention: 168h           # how long to keep history
+
+persistence:
+  enabled: true           # off: history is lost on restart
+  size: 2Gi
+  storageClass: ""        # "" = the cluster default
+
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { memory: 256Mi }
+
+# Dashboard sign-in. Leave existingSecret empty to have one generated
+# (keys: password, viewer-password); see the install notes to read it.
+auth:
+  existingSecret: ""
+  generate: true          # false + no secret = read-only dashboard, no approvals
+
+dashboardURL: ""          # e.g. https://sophron.example.com, for links in Slack
+
+# Slack: a Secret with key webhook-url (kubectl create secret generic sophron-slack --from-file=webhook-url=/dev/stdin)
+slack:
+  existingSecret: ""
+  minSeverity: warning
+
+# Prices. Nodes are priced by, in order: a sophron.dev/hourly-price node
+# label, these rules, OpenCost if installed, then default prices (marked as
+# an estimate).
+pricing:
+  nodes: []
+  # - name: "gpu-*"
+  #   hourly: 0.8048
+  # - match: { node.kubernetes.io/instance-type: rtx-4090-box }
+  #   owned: { purchasePrice: 3200, lifetimeYears: 3, powerWatts: 450, electricityPerKWh: 0.12, pue: 1.2 }
+  referenceAPIs: []
+  # - name: Some hosted API
+  #   inputPer1M: 0.50
+  #   outputPer1M: 1.50
+
+# Fixes. Nothing is changed in a namespace that isn't listed here, whatever
+# anyone approves. Each listed namespace gets a narrow Role for Sophron.
+policy:
+  default: approve        # auto | approve | never
+  namespaces: []          # e.g. [llm]
+  maxReplicas: 3
+  actions: {}             # e.g. { rollout-restart: auto, rollout-undo: approve }
+
+service:
+  type: ClusterIP
+  port: 8080

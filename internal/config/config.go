@@ -33,6 +33,12 @@ type Config struct {
 	Cost        bool
 	PricingFile string
 
+	Fixes              bool
+	PolicyFile         string
+	AdminPasswordFile  string
+	ViewerPasswordFile string
+	DashboardURL       string
+
 	ClusterName      string
 	Timezone         string
 	SlackWebhookURL  string // a secret: never log it
@@ -62,6 +68,11 @@ func Parse(args []string) (*Config, error) {
 	fs.DurationVar(&c.ResolveAfter, "resolve-after", envDuration("SOPHRON_RESOLVE_AFTER", 90*time.Second), "resolve a finding after it's gone for this long")
 	fs.BoolVar(&c.Cost, "cost", envBool("SOPHRON_COST", true), "price every snapshot and serve the cost API")
 	fs.StringVar(&c.PricingFile, "pricing-file", env("SOPHRON_PRICING_FILE", ""), "price file: node prices, owned hardware, reference APIs (empty: OpenCost or default prices)")
+	fs.BoolVar(&c.Fixes, "fixes", envBool("SOPHRON_FIXES", true), "turn suggested actions into fix requests that can be approved")
+	fs.StringVar(&c.PolicyFile, "policy-file", env("SOPHRON_POLICY_FILE", ""), "fix policy: auto/approve/never per action, allowed namespaces (empty: approve, no namespaces)")
+	fs.StringVar(&c.AdminPasswordFile, "admin-password-file", env("SOPHRON_ADMIN_PASSWORD_FILE", "/etc/sophron/admin/password"), "dashboard admin password file (missing: read-only, no approvals)")
+	fs.StringVar(&c.ViewerPasswordFile, "viewer-password-file", env("SOPHRON_VIEWER_PASSWORD_FILE", "/etc/sophron/admin/viewer-password"), "optional read-only viewer password file")
+	fs.StringVar(&c.DashboardURL, "dashboard-url", env("SOPHRON_DASHBOARD_URL", ""), "dashboard address for links in alerts, e.g. http://localhost:8081")
 	fs.StringVar(&c.ClusterName, "cluster-name", env("SOPHRON_CLUSTER_NAME", "kubernetes"), "cluster name shown in alerts")
 	fs.StringVar(&c.Timezone, "timezone", env("SOPHRON_TIMEZONE", "UTC"), "time zone for times in alerts, e.g. Asia/Kolkata (UTC is shown too)")
 	fs.StringVar(&c.SlackWebhookURL, "slack-webhook-url", env("SOPHRON_SLACK_WEBHOOK_URL", ""), "Slack incoming webhook URL; prefer the env var from a Secret (empty: Slack off)")

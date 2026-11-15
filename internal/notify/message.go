@@ -137,6 +137,13 @@ func (s *Slack) problemCard(f rules.Finding, status string, test bool) []Block {
 		}
 		blocks = append(blocks, section(b.String()))
 	}
+	if a := f.Fix.Action; a != nil && !test {
+		where := "Approve or deny it in the Sophron dashboard, under Approvals."
+		if s.cfg.Dashboard != "" {
+			where = fmt.Sprintf("<%s/#/approvals|Approve or deny it in Sophron>", strings.TrimRight(s.cfg.Dashboard, "/"))
+		}
+		blocks = append(blocks, section("*Sophron can do this for you*\n"+esc(a.Summary)+"\n"+where))
+	}
 	if snip := strings.TrimSpace(f.Fix.Snippet); snip != "" {
 		// Leave room for the fences.
 		blocks = append(blocks, section("```"+truncate(esc(snip), sectionLimit-10)+"```"))

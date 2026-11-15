@@ -2,6 +2,7 @@
 # Checks the Phase 4 "done when" list and prints PASS/FAIL for each item.
 # Run after `make collector-up`. It sends some load first, so tokens exist.
 set -uo pipefail
+source "$(dirname "$0")/auth.sh"
 
 pass=0; fail=0
 ok()  { printf '  \033[32mPASS\033[0m  %s\n' "$*"; pass=$((pass + 1)); }
@@ -13,7 +14,7 @@ kubectl -n sophron-system port-forward svc/sophron-collector "$port:8080" --addr
 pf=$!
 trap 'kill $pf 2>/dev/null || true' EXIT
 for _ in $(seq 1 20); do curl -fs "http://127.0.0.1:$port/healthz" >/dev/null 2>&1 && break; sleep 0.25; done
-api() { curl -fsS "http://127.0.0.1:$port$1" 2>/dev/null; }
+api() { curl -fsS "${AUTH[@]}" "http://127.0.0.1:$port$1" 2>/dev/null; }
 
 echo "Phase 4 checks"
 echo "  (sending load for ~2 minutes so there are tokens to price...)"

@@ -106,6 +106,7 @@ func detectQueueBacklog(in Input) []Finding {
 					"To really cut waiting: add a replica, move to a bigger node, or use a GPU.",
 				},
 				Snippet: fmt.Sprintf("kubectl -n %s scale %s --replicas=2", s.Namespace, kubectlTarget(s)),
+				Action:  actionFor(s, ActionScaleUp, "+1", fmt.Sprintf("Add one replica to %s", name(s))),
 			}
 		} else {
 			fix = Fix{Summary: "Allow more requests at once, or add a replica."}

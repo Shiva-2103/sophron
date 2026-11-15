@@ -5,6 +5,7 @@
 # Usage: bash lab/scripts/check-rules.sh [scenario ...]   (default: all)
 # Takes about 25 minutes for all six.
 set -uo pipefail
+source "$(dirname "$0")/auth.sh"
 
 ALL="oom crash gpu rollout slow-start queue"
 SCENARIOS="${*:-$ALL}"
@@ -31,7 +32,7 @@ connect() {
 trap 'kill $pf 2>/dev/null || true' EXIT
 
 api() { # path -> json; reconnects once if the port-forward died
-  curl -fsS "http://127.0.0.1:$PORT$1" 2>/dev/null || { connect; curl -fsS "http://127.0.0.1:$PORT$1"; }
+  curl -fsS "${AUTH[@]}" "http://127.0.0.1:$PORT$1" 2>/dev/null || { connect; curl -fsS "${AUTH[@]}" "http://127.0.0.1:$PORT$1"; }
 }
 
 # wait_for detector pattern since timeout -> prints the finding title, or nothing

@@ -16,6 +16,8 @@ type Snapshot struct {
 	// From Kubernetes: the pod.
 	WorkloadKind string `json:"workloadKind,omitempty"`
 	WorkloadName string `json:"workloadName,omitempty"`
+	// The model server container (the one that last failed, else the first).
+	Container string `json:"container,omitempty"`
 	// Which version of the workload this pod runs (pod-template-hash or
 	// controller-revision-hash). Two revisions at once means a rollout.
 	Revision              string  `json:"revision,omitempty"`
