@@ -11,7 +11,7 @@ set -euo pipefail
 
 CLUSTER="${CLUSTER:-sophron-lab}"
 STATE_DIR=".lab"
-PORT=3000
+PORT="${PORT:-3000}"   # make dashboard-allow-me reuses allow/revoke with 8081
 
 # EC2 instance metadata (IMDSv2). Empty output when not on EC2.
 imds() {

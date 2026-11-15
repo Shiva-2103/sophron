@@ -105,7 +105,9 @@ Confidence is **high** with 7 days and 1,000+ samples, **medium** with a day, **
 | Command | Does |
 |---|---|
 | `make admin-password` | Creates the admin and viewer logins (once) and prints them |
-| `make dashboard` | Serves the dashboard on port 8081 and prints the SSM port-forward for your laptop |
+| `make dashboard-allow-me` | Opens port 8081 in the security group for your IP only |
+| `make dashboard` | Serves the dashboard at http://<public-ip>:8081, restarting the port-forward if the collector restarts |
+| `make dashboard-private` | Serves it on the machine only; prints the SSM port-forward for your laptop |
 | `make demo` | The dashboard on sample data, no cluster (http://localhost:8090, admin / demo-password-1) |
 | `make doctor` | Setup checks |
 | `make savings` / `make fixes` | Savings suggestions / fix requests |
@@ -136,6 +138,8 @@ Confidence is **high** with 7 days and 1,000+ samples, **medium** with a day, **
 > | In the first lab run, the two memory steps that weren't enough were also marked "verified" | Steps a follow-up replaces become **superseded**; only the step that ends the problem is verified |
 > | The receipt said "1.2Gi" for 1280Mi | Quantities that aren't whole GiB print in Mi |
 > | Anyone in the Slack channel could press Approve | Only Slack member IDs on the approvers list can; others get a private refusal |
+> | Slack said "not configured to handle interactive responses" | Creating the app token isn't enough: Socket Mode and Interactivity must both be switched on in the app settings |
+> | `kubectl port-forward` died every time the collector restarted, so the dashboard went away | `make dashboard` runs it in a restart loop, on 0.0.0.0:8081 |
 > | Couldn't download Helm in the build sandbox | CI lints and renders the chart, then validates it with kubeconform |
 {.is-danger}
 

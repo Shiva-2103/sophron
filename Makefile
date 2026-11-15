@@ -10,7 +10,7 @@ MON_NS       := monitoring
 MON_RELEASE  := monitoring
 IMAGE        ?= sophron-collector:dev
 
-.PHONY: help slack-buttons slack-approvers admin-password dashboard dashboard-stop dashboard-3000 dashboard-3000-off dashboard-tunnel demo doctor fixes e2e-check savings cost cost-models cost-nodes cost-check slack-secret slack-test slack-off build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
+.PHONY: help slack-buttons slack-approvers admin-password dashboard dashboard-private dashboard-allow-me dashboard-revoke-me dashboard-stop dashboard-3000 dashboard-3000-off dashboard-tunnel demo doctor fixes e2e-check savings cost cost-models cost-nodes cost-check slack-secret slack-test slack-off build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
 
 help: ## List available commands
 	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z0-9_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -94,8 +94,17 @@ savings: ## Savings suggestions from the last 7 days
 admin-password: ## Create the dashboard admin and viewer passwords (once) and print them
 	@bash $(LAB_DIR)/scripts/dashboard.sh password
 
-dashboard: ## Serve the dashboard on port 8081 (prints the SSM port-forward for your laptop)
+dashboard: ## Serve the dashboard at http://<public-ip>:8081 (open 8081 to your IP in the security group)
 	@bash $(LAB_DIR)/scripts/dashboard.sh start
+
+dashboard-private: ## Serve the dashboard on this machine only; prints the SSM port-forward for your laptop
+	@BIND=127.0.0.1 bash $(LAB_DIR)/scripts/dashboard.sh start
+
+dashboard-allow-me: ## EC2: open port 8081 in the security group for your IP only
+	@PORT=8081 bash $(LAB_DIR)/scripts/grafana.sh allow
+
+dashboard-revoke-me: ## EC2: close port 8081 for your IP again
+	@PORT=8081 bash $(LAB_DIR)/scripts/grafana.sh revoke
 
 dashboard-stop: ## Stop serving the dashboard
 	@bash $(LAB_DIR)/scripts/dashboard.sh stop

@@ -140,11 +140,12 @@ The lab's price lives in the `sophron-pricing` ConfigMap in `deploy/collector/co
 ```bash
 git pull && make collector-up   # rebuild with the dashboard, fixes and policy
 make admin-password             # once: prints the admin and viewer passwords
-make dashboard                  # serves it on port 8081, prints the SSM command for your laptop
+make dashboard-allow-me         # opens port 8081 in the security group for your IP only
+make dashboard                  # serves it at http://<public-ip>:8081
 make e2e-check                  # break → alert → approve → fixed → receipt (~5-15 min)
 ```
 
-On your laptop, run the `aws ssm start-session ... AWS-StartPortForwardingSession` command it prints, then open http://localhost:8081.
+`make dashboard` keeps serving when the collector restarts, and allows sign-in over plain http (lab only). Prefer no open port? `make dashboard-private` serves it on the machine only and prints the SSM port-forward command for your laptop.
 
 No cluster? `make demo` runs the same dashboard on sample data at http://localhost:8090 (admin / demo-password-1).
 
@@ -166,7 +167,8 @@ No cluster? `make demo` runs the same dashboard on sample data at http://localho
 | `make chaos SCENARIO=...` / `chaos-reset` | Break the model server on purpose / undo |
 | `make rules-check` | Phase 3 check, all scenarios |
 | `make cost` / `cost-models` / `cost-nodes` / `cost-check` | What it costs; Phase 4 check |
-| `make admin-password` / `dashboard` / `dashboard-stop` | Dashboard logins / serve it on 8081 / stop |
+| `make admin-password` / `dashboard` / `dashboard-stop` | Dashboard logins / serve it on public port 8081 / stop |
+| `make dashboard-allow-me` / `dashboard-revoke-me` / `dashboard-private` | Open or close 8081 for your IP / serve via SSM only |
 | `make doctor` / `savings` / `fixes` / `e2e-check` | Setup checks / savings / fix requests / the full loop |
 | `make slack-secret` / `slack-test` / `slack-off` | Store the Slack webhook / send a sample alert / stop alerts |
 
