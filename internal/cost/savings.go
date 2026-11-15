@@ -84,7 +84,7 @@ func (r *Reporter) Savings(ctx context.Context, window time.Duration) ([]Saving,
 			}
 		}
 		out = append(out, rightSize(k, g, last, np, pods, window)...)
-		if s, ok := idleModel(k, g, now, window); ok {
+		if s, ok := idleModel(k, g, now); ok {
 			out = append(out, s)
 		}
 		if s, ok := nodeFit(k, last, np, nodes, prices, pods); ok {
@@ -196,7 +196,7 @@ func rightSize(k workloadKey, g []collector.Snapshot, last collector.Snapshot, n
 }
 
 // idleModel finds models that mostly wait for traffic.
-func idleModel(k workloadKey, g []collector.Snapshot, now time.Time, window time.Duration) (Saving, bool) {
+func idleModel(k workloadKey, g []collector.Snapshot, now time.Time) (Saving, bool) {
 	w := weights(g, now)
 	var busy, total, cost float64
 	for i, s := range g {

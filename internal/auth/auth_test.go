@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,7 +29,7 @@ func TestLoginSessionAndBasic(t *testing.T) {
 		t.Fatalf("login: %+v %v", u, err)
 	}
 	c := rec.Result().Cookies()[0]
-	if !c.HttpOnly || c.SameSite != http.SameSiteStrictMode {
+	if !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteStrictMode {
 		t.Errorf("cookie not hardened: %+v", c)
 	}
 	r := httptest.NewRequest("GET", "/", nil)
@@ -56,7 +57,7 @@ func TestRateLimitAndRules(t *testing.T) {
 			t.Fatal("wrong password accepted")
 		}
 	}
-	if _, err := a.Login(httptest.NewRecorder(), httptest.NewRequest("POST", "/", nil), "admin", "correct-horse-1"); err != ErrTooManyAttempts {
+	if _, err := a.Login(httptest.NewRecorder(), httptest.NewRequest("POST", "/", nil), "admin", "correct-horse-1"); !errors.Is(err, ErrTooManyAttempts) {
 		t.Errorf("want rate limit after 5 failures, got %v", err)
 	}
 	if _, err := New(Config{AdminPasswordFile: write(t, "short")}); err == nil {

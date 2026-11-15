@@ -147,9 +147,10 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request, name, password stri
 	a.mu.Lock()
 	a.sessions[token] = session{user: u, expires: time.Now().Add(a.ttl)}
 	a.mu.Unlock()
-	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: token, Path: "/", HttpOnly: true,
-		Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https", SameSite: http.SameSiteStrictMode,
-		MaxAge: int(a.ttl.Seconds())})
+	// Secure always: browsers treat http://localhost (port-forward, SSM
+	// tunnel) as secure, and anything else should be behind HTTPS anyway.
+	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: token, Path: "/", HttpOnly: true, Secure: true,
+		SameSite: http.SameSiteStrictMode, MaxAge: int(a.ttl.Seconds())})
 	return u, nil
 }
 
@@ -160,7 +161,7 @@ func (a *Auth) Logout(w http.ResponseWriter, r *http.Request) {
 		delete(a.sessions, c.Value)
 		a.mu.Unlock()
 	}
-	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
 }
 
 // UserFrom finds the caller: a session cookie, or basic auth (for scripts).
