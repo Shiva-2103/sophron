@@ -58,7 +58,12 @@ CREATE TABLE IF NOT EXISTS snapshots (
   revision                    TEXT,
   created_at                  INTEGER,
   started_at                  INTEGER,
-  ready_at                    INTEGER
+  ready_at                    INTEGER,
+  memory_request_bytes        REAL,
+  node_region                 TEXT,
+  cost_per_hour               REAL,
+  node_cost_per_hour          REAL,
+  price_source                TEXT
 );
 CREATE INDEX IF NOT EXISTS snapshots_pod_time ON snapshots (namespace, pod, time);
 CREATE INDEX IF NOT EXISTS snapshots_time ON snapshots (time);
@@ -75,6 +80,7 @@ var columns = []string{
 	"kv_cache_usage_ratio", "cpu_cores", "cpu_throttled_ratio", "memory_working_set_bytes",
 	"gpu_utilization_ratio", "gpu_memory_used_bytes",
 	"revision", "created_at", "started_at", "ready_at",
+	"memory_request_bytes", "node_region", "cost_per_hour", "node_cost_per_hour", "price_source",
 }
 
 // migrations add columns introduced after the first release, so databases
@@ -86,6 +92,11 @@ var migrations = []column{
 	{"created_at", "INTEGER"},
 	{"started_at", "INTEGER"},
 	{"ready_at", "INTEGER"},
+	{"memory_request_bytes", "REAL"},
+	{"node_region", "TEXT"},
+	{"cost_per_hour", "REAL"},
+	{"node_cost_per_hour", "REAL"},
+	{"price_source", "TEXT"},
 }
 
 // ms turns a time into unix milliseconds, or NULL when unset.
@@ -114,6 +125,7 @@ func values(s collector.Snapshot) []any {
 		s.KVCacheUsageRatio, s.CPUCores, s.CPUThrottledRatio, s.MemoryWorkingSetBytes,
 		s.GPUUtilizationRatio, s.GPUMemoryUsedBytes,
 		s.Revision, ms(s.CreatedAt), ms(s.StartedAt), ms(s.ReadyAt),
+		s.MemoryRequestBytes, s.NodeRegion, s.CostPerHour, s.NodeCostPerHour, s.PriceSource,
 	}
 }
 
@@ -129,6 +141,7 @@ func (s *scanner) targets() []any {
 		&x.KVCacheUsageRatio, &x.CPUCores, &x.CPUThrottledRatio, &x.MemoryWorkingSetBytes,
 		&x.GPUUtilizationRatio, &x.GPUMemoryUsedBytes,
 		&s.revision, &s.createdAt, &s.startedAt, &s.readyAt,
+		&s.memRequest, &s.region, &x.CostPerHour, &x.NodeCostPerHour, &s.priceSource,
 	}
 }
 
@@ -139,7 +152,8 @@ type scanner struct {
 	ms                                                          int64
 	workloadKind, workloadName, phase, waiting, lastTerm        sql.NullString
 	warnReason, warnMessage, node, provider, instanceType, zone sql.NullString
-	capacityType, revision                                      sql.NullString
+	capacityType, revision, region, priceSource                 sql.NullString
+	memRequest                                                  sql.NullFloat64
 	createdAt, startedAt, readyAt                               sql.NullInt64
 	nodeCPU, nodeMem                                            sql.NullFloat64
 	nodeGPUs                                                    sql.NullInt64
@@ -156,6 +170,7 @@ func (s *scanner) result() collector.Snapshot {
 	x.NodeCPUCores, x.NodeMemoryBytes, x.NodeGPUs = s.nodeCPU.Float64, s.nodeMem.Float64, s.nodeGPUs.Int64
 	x.Revision, x.CreatedAt = s.revision.String, fromMS(s.createdAt)
 	x.StartedAt, x.ReadyAt = fromMS(s.startedAt), fromMS(s.readyAt)
+	x.MemoryRequestBytes, x.NodeRegion, x.PriceSource = s.memRequest.Float64, s.region.String, s.priceSource.String
 	return x
 }
 

@@ -185,7 +185,15 @@ func (s *Slack) resolvedCard(f rules.Finding) []Block {
 		if r.ApprovedBy != "" {
 			approved = esc(r.ApprovedBy)
 		}
-		blocks = append(blocks, fields("Changed with", changed, "Approved by", approved))
+		kv := []string{"Changed with", changed, "Approved by", approved}
+		if r.DownSeconds > 0 {
+			cost := "not priced yet"
+			if r.DownCost != nil {
+				cost = money(*r.DownCost)
+			}
+			kv = append(kv, "Not serving for", humanDuration(time.Duration(r.DownSeconds*float64(time.Second))), "Cost while down", cost)
+		}
+		blocks = append(blocks, fields(kv...))
 	}
 	return append(blocks, contextBlock(s.footer(f)))
 }
@@ -290,6 +298,14 @@ func titleCase(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// money prints USD with cents, or more digits for tiny amounts.
+func money(v float64) string {
+	if v > 0 && v < 0.01 {
+		return fmt.Sprintf("$%.4f", v)
+	}
+	return fmt.Sprintf("$%.2f", v)
 }
 
 func humanDuration(d time.Duration) string {

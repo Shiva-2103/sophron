@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,6 +25,63 @@ type Resolution struct {
 	ChangedAt time.Time `json:"changedAt,omitzero"`
 	// Who approved the fix, when Sophron applies fixes itself (later).
 	ApprovedBy string `json:"approvedBy,omitempty"`
+	// While the finding was open, how long no pod of the workload was Ready,
+	// and what the workload cost during that time (USD). Its price was paid
+	// for nothing.
+	DownSeconds float64  `json:"downSeconds,omitempty"`
+	DownCost    *float64 `json:"downCost,omitempty"`
+}
+
+// downtime adds up the cycles, between first and last seen, in which the
+// workload had pods but none of them Ready, and what they cost meanwhile.
+func downtime(f Finding, snaps []collector.Snapshot) (float64, *float64) {
+	type cycle struct {
+		pods, ready int
+		cost        float64
+		priced      bool
+	}
+	cycles := map[time.Time]*cycle{}
+	for _, s := range snaps {
+		if !sameWorkload(f, s) || s.Time.Before(f.FirstSeen) || s.Time.After(f.LastSeen) {
+			continue
+		}
+		c := cycles[s.Time]
+		if c == nil {
+			c = &cycle{}
+			cycles[s.Time] = c
+		}
+		c.pods++
+		if s.Ready {
+			c.ready++
+		}
+		if s.CostPerHour != nil {
+			c.cost += *s.CostPerHour
+			c.priced = true
+		}
+	}
+	times := make([]time.Time, 0, len(cycles))
+	for t := range cycles {
+		times = append(times, t)
+	}
+	sort.Slice(times, func(a, b int) bool { return times[a].Before(times[b]) })
+	var secs, cost float64
+	priced := false
+	for i, t := range times {
+		c := cycles[t]
+		if c.ready > 0 || i+1 == len(times) {
+			continue
+		}
+		gap := min(times[i+1].Sub(t), 2*time.Minute).Seconds()
+		secs += gap
+		if c.priced {
+			cost += c.cost * gap / 3600
+			priced = true
+		}
+	}
+	if !priced {
+		return secs, nil
+	}
+	return secs, &cost
 }
 
 // ChangeFinder looks up who last changed a workload's spec. Optional: without

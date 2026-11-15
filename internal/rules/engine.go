@@ -173,6 +173,7 @@ func (e *Engine) process(ctx context.Context, latest []collector.Snapshot) (Stat
 // workload is best effort: a failure only leaves ChangedBy empty.
 func (e *Engine) resolution(ctx context.Context, f Finding, in Input) Resolution {
 	r := explainResolution(f, in)
+	r.DownSeconds, r.DownCost = downtime(f, e.findingSnapshots(ctx, f, in))
 	if e.Changes == nil || f.WorkloadName == "" {
 		return r
 	}
@@ -188,6 +189,24 @@ func (e *Engine) resolution(ctx context.Context, f Finding, in Input) Resolution
 		r.ChangedBy, r.ChangedAt = FriendlyManager(manager), at
 	}
 	return r
+}
+
+// findingSnapshots returns snapshots covering the finding's whole life:
+// the history already loaded when it fits, otherwise a fresh query.
+func (e *Engine) findingSnapshots(ctx context.Context, f Finding, in Input) []collector.Snapshot {
+	if !f.FirstSeen.Before(in.Now.Add(-in.Config.HistoryWindow())) {
+		var out []collector.Snapshot
+		for _, h := range in.History {
+			out = append(out, h...)
+		}
+		return out
+	}
+	snaps, err := e.Store.Since(ctx, f.FirstSeen)
+	if err != nil {
+		e.Log.Debug("could not load snapshots for downtime", "finding", f.Key, "error", err)
+		return nil
+	}
+	return snaps
 }
 
 // safeDetect stops one buggy detector from taking the whole engine down.

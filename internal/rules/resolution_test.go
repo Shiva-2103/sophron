@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -94,3 +95,34 @@ func TestEngineResolutionChangedBy(t *testing.T) {
 		t.Errorf("want a resolution without ChangedBy, got %+v", r)
 	}
 }
+
+func TestDowntimeCost(t *testing.T) {
+	f := Finding{Detector: OOMKilled, Namespace: "llm", WorkloadKind: "Deployment", WorkloadName: "llm-server",
+		FirstSeen: now.Add(-10 * time.Minute), LastSeen: now.Add(-2 * time.Minute)}
+	var snaps []collector.Snapshot
+	// One snapshot a minute: down (not Ready) for the first 4 minutes, then Ready.
+	for i := 10; i >= 0; i-- {
+		s := pod("p", func(s *collector.Snapshot) { s.CostPerHour = f2(0.6) })
+		s.Time = now.Add(-time.Duration(i) * time.Minute)
+		snaps = append(snaps, s)
+	}
+	for i := range snaps {
+		snaps[i].Ready = i >= 4 // cycles 0..3 down
+	}
+	secs, cost := downtime(f, snaps)
+	if secs != 240 {
+		t.Errorf("down %v s, want 240", secs)
+	}
+	if cost == nil || math.Abs(*cost-0.6*240/3600) > 1e-9 {
+		t.Errorf("cost %v, want %v", cost, 0.6*240/3600)
+	}
+	// No prices yet (an older collector): time, but no cost.
+	for i := range snaps {
+		snaps[i].CostPerHour = nil
+	}
+	if secs, cost := downtime(f, snaps); secs != 240 || cost != nil {
+		t.Errorf("unpriced: %v %v", secs, cost)
+	}
+}
+
+func f2(v float64) *float64 { return &v }

@@ -89,7 +89,8 @@ func TestMigrationAddsNewColumns(t *testing.T) {
 	}
 	// Simulate an older database by dropping the newer columns.
 	for _, c := range []string{"snapshots DROP COLUMN revision", "snapshots DROP COLUMN created_at",
-		"snapshots DROP COLUMN started_at", "snapshots DROP COLUMN ready_at", "findings DROP COLUMN resolution"} {
+		"snapshots DROP COLUMN started_at", "snapshots DROP COLUMN ready_at", "snapshots DROP COLUMN memory_request_bytes",
+		"snapshots DROP COLUMN cost_per_hour", "snapshots DROP COLUMN price_source", "findings DROP COLUMN resolution"} {
 		if _, err := s.db.Exec("ALTER TABLE " + c); err != nil {
 			t.Fatal(err)
 		}

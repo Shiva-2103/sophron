@@ -52,10 +52,13 @@ Built with: Go, unit tests, plus chaos scenarios that trigger each failure on pu
 
 Answers "what does this cost, and what should it run on?"
 
-- Gets node prices from cloud pricing APIs, or from prices you enter for on-prem
-- Uses [OpenCost](https://www.opencost.io) for the basic Kubernetes cost split
-- Adds cost per model, cost per 1,000 tokens and idle GPU cost
-- Checks if a model fits on a cheaper node, and gives you the YAML change
+- Prices each node: a node label, your price file (cloud or owned hardware), [OpenCost](https://www.opencost.io)'s prices if installed, or default prices marked as an estimate
+- Splits the price per CPU core, GiB and GPU; each pod pays the larger of reserved and used
+- Reports cost per model per hour, month and 1M tokens; idle cost per node; down cost of each finding
+- Compares self-hosting with hosted APIs you choose, with the break-even volume
+- Next: checks if a model fits on a cheaper node, and gives you the YAML change
+
+See [the Phase 4 learning note](learning/04-phase-4-cost-engine.md).
 
 Sophron suggests node changes. Your autoscaler (Karpenter or Cluster Autoscaler) does the actual work.
 

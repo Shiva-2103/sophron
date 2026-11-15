@@ -74,6 +74,20 @@ chaos-reset: ## Undo any chaos scenario
 rules-check: ## Phase 3 check: run each chaos scenario, verify the right detector fires (~25 min)
 	@bash $(LAB_DIR)/scripts/check-rules.sh $(SCENARIOS)
 
+##@ Cost engine (Phase 4)
+cost: ## Cluster cost at a glance: spend, idle, cost per 1M tokens (WINDOW=1h)
+	@bash $(LAB_DIR)/scripts/api.sh '/api/v1/cost/summary?window=$(or $(WINDOW),1h)'
+
+cost-models: ## Cost and throughput per model (WINDOW=1h)
+	@bash $(LAB_DIR)/scripts/api.sh '/api/v1/cost/models?window=$(or $(WINDOW),1h)'
+
+cost-nodes: ## Each node: price, model pods, other pods, idle
+	@bash $(LAB_DIR)/scripts/api.sh /api/v1/cost/nodes
+
+cost-check: ## Phase 4 check: send load, verify prices and cost per token (~3 min)
+	@bash $(LAB_DIR)/scripts/check-cost.sh
+
+##@ Slack
 slack-secret: ## Save the Slack webhook URL as a Kubernetes Secret (hidden prompt)
 	@bash $(LAB_DIR)/scripts/slack.sh secret
 

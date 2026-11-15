@@ -10,6 +10,8 @@ We build Sophron one working brick at a time. Each phase:
 
 Timing assumes 8 to 10 hours a week.
 
+> Order changed on 15 Nov 2026: Phase 6 (approvals and operator) comes before Phase 5 (dashboard), so the dashboard is designed around real approvals.
+
 ## Phase 0: Repo and plan
 
 Week 1
@@ -53,6 +55,7 @@ Weeks 7 to 9. Detect real failures.
 - [x] Findings API and `make findings`
 - [x] `make rules-check` passes in the lab (all 6 scenarios)
 - [x] Slack message with evidence and the suggested fix (`make slack-secret`, `make slack-test`)
+- [x] Resolved alerts say what changed, with which tool, and how long it was down
 
 Learn: turning runbooks into code, chaos testing, alerts that aren't noisy
 
@@ -60,8 +63,13 @@ Learn: turning runbooks into code, chaos testing, alerts that aren't noisy
 
 Weeks 10 to 12. What it costs and where it should run.
 
-- [ ] Cost per model and per 1,000 tokens
-- [ ] Node-fit suggestions, checked by hand for 3 models
+- [x] Every snapshot priced: node label, price file, OpenCost, or defaults marked as an estimate
+- [x] Cost per model per hour, per month and per 1M tokens
+- [x] Idle cost per node; model + other pods + idle = node price
+- [x] Down cost on resolved findings and in Slack
+- [x] Self-hosted vs API comparison and break-even (APIs you choose)
+- [ ] `make cost-check` passes in the lab
+- [ ] Savings suggestions: right-size, node fit, checked by hand for 3 models
 
 Learn: Kubernetes FinOps, GPU memory math, quantization
 

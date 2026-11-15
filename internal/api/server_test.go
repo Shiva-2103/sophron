@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Shiva-2103/sophron/internal/collector"
+	"github.com/Shiva-2103/sophron/internal/cost"
 	"github.com/Shiva-2103/sophron/internal/rules"
 )
 
@@ -126,5 +127,39 @@ func TestFindingsAPI(t *testing.T) {
 	}
 	if do(t, h, "/api/v1/rules/status").Code != 200 {
 		t.Error("rules status")
+	}
+}
+
+type fakeCost struct{ window time.Duration }
+
+func (f *fakeCost) Models(_ context.Context, w time.Duration) ([]cost.ModelCost, error) {
+	f.window = w
+	return nil, nil
+}
+func (f *fakeCost) Nodes(context.Context) ([]cost.NodeCost, error) { return nil, nil }
+func (f *fakeCost) Summary(_ context.Context, w time.Duration) (cost.Summary, error) {
+	f.window = w
+	return cost.Summary{SpendPerHour: 0.33}, nil
+}
+
+func TestCostAPI(t *testing.T) {
+	s := &Server{Store: &fakeStore{}, Interval: time.Second, Status: func() collector.Status { return collector.Status{} }}
+	if do(t, s.Handler(), "/api/v1/cost/summary").Code != 404 {
+		t.Error("cost should 404 when the cost engine is off")
+	}
+	fc := &fakeCost{}
+	s.Cost = fc
+	h := s.Handler()
+	if rec := do(t, h, "/api/v1/cost/summary"); rec.Code != 200 || fc.window != time.Hour {
+		t.Errorf("summary: %d, window %s", rec.Code, fc.window)
+	}
+	if rec := do(t, h, "/api/v1/cost/models?window=24h"); rec.Code != 200 || fc.window != 24*time.Hour || rec.Body.String() != "[]\n" {
+		t.Errorf("models: %d %q window %s", rec.Code, rec.Body.String(), fc.window)
+	}
+	if do(t, h, "/api/v1/cost/nodes").Code != 200 {
+		t.Error("nodes")
+	}
+	if do(t, h, "/api/v1/cost/models?window=1s").Code != 400 {
+		t.Error("a 1s window should be rejected")
 	}
 }

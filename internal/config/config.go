@@ -30,6 +30,9 @@ type Config struct {
 	SlowStartAfter    time.Duration
 	ResolveAfter      time.Duration
 
+	Cost        bool
+	PricingFile string
+
 	ClusterName      string
 	Timezone         string
 	SlackWebhookURL  string // a secret: never log it
@@ -57,6 +60,8 @@ func Parse(args []string) (*Config, error) {
 	fs.DurationVar(&c.RolloutStuckAfter, "rollout-stuck-after", envDuration("SOPHRON_ROLLOUT_STUCK_AFTER", 3*time.Minute), "report rollouts whose new pod isn't Ready after this long")
 	fs.DurationVar(&c.SlowStartAfter, "slow-start-after", envDuration("SOPHRON_SLOW_START_AFTER", 2*time.Minute), "report pods taking longer than this to become Ready")
 	fs.DurationVar(&c.ResolveAfter, "resolve-after", envDuration("SOPHRON_RESOLVE_AFTER", 90*time.Second), "resolve a finding after it's gone for this long")
+	fs.BoolVar(&c.Cost, "cost", envBool("SOPHRON_COST", true), "price every snapshot and serve the cost API")
+	fs.StringVar(&c.PricingFile, "pricing-file", env("SOPHRON_PRICING_FILE", ""), "price file: node prices, owned hardware, reference APIs (empty: OpenCost or default prices)")
 	fs.StringVar(&c.ClusterName, "cluster-name", env("SOPHRON_CLUSTER_NAME", "kubernetes"), "cluster name shown in alerts")
 	fs.StringVar(&c.Timezone, "timezone", env("SOPHRON_TIMEZONE", "UTC"), "time zone for times in alerts, e.g. Asia/Kolkata (UTC is shown too)")
 	fs.StringVar(&c.SlackWebhookURL, "slack-webhook-url", env("SOPHRON_SLACK_WEBHOOK_URL", ""), "Slack incoming webhook URL; prefer the env var from a Secret (empty: Slack off)")

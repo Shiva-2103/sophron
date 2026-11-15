@@ -123,6 +123,18 @@ make chaos SCENARIO=oom   # a real one, about a minute later; make chaos-reset a
 
 > The webhook URL is a password. Never paste it into chat, a file or Git. Lost it or leaked it? Delete the webhook in the Slack app page and make a new one. `make slack-off` stops alerts.
 
+## 10. See what it costs (Phase 4)
+
+```bash
+make collector-up     # rebuild with the cost engine
+make cost-check       # sends load, then checks prices and cost per token (~3 min)
+make cost             # the cluster at a glance
+make cost-models      # per model: $/hour, $/month, $ per 1M tokens, capacity used
+make cost-nodes       # per node: price, model pods, other pods, idle
+```
+
+The lab's price lives in the `sophron-pricing` ConfigMap in `deploy/collector/collector.yaml`: the EC2 price split over the three kind nodes. Edit `referenceAPIs` there to compare with APIs you know the prices of.
+
 ## Commands
 
 | Command | Does |
@@ -140,6 +152,7 @@ make chaos SCENARIO=oom   # a real one, about a minute later; make chaos-reset a
 | `make findings` / `detectors` | Problems found / what each detector checks |
 | `make chaos SCENARIO=...` / `chaos-reset` | Break the model server on purpose / undo |
 | `make rules-check` | Phase 3 check, all scenarios |
+| `make cost` / `cost-models` / `cost-nodes` / `cost-check` | What it costs; Phase 4 check |
 | `make slack-secret` / `slack-test` / `slack-off` | Store the Slack webhook / send a sample alert / stop alerts |
 
 ## Save money

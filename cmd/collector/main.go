@@ -24,6 +24,7 @@ import (
 	"github.com/Shiva-2103/sophron/internal/api"
 	"github.com/Shiva-2103/sophron/internal/collector"
 	"github.com/Shiva-2103/sophron/internal/config"
+	"github.com/Shiva-2103/sophron/internal/cost"
 	"github.com/Shiva-2103/sophron/internal/kube"
 	"github.com/Shiva-2103/sophron/internal/mapping"
 	"github.com/Shiva-2103/sophron/internal/notify"
@@ -98,6 +99,17 @@ func run() error {
 
 	c := &collector.Collector{Prom: promClient, Kube: inf, Mapping: m, Store: db, Log: log}
 	apiSrv := &api.Server{Store: db, Status: c.Status, Synced: inf.HasSynced, Interval: cfg.Interval}
+
+	if cfg.Cost {
+		prices, err := cost.LoadPriceFile(cfg.PricingFile)
+		if err != nil {
+			return err
+		}
+		pricer := &cost.Pricer{Nodes: inf, Prom: promClient, File: prices, Log: log}
+		c.Pricer = pricer
+		apiSrv.Cost = &cost.Reporter{Store: db, Pricer: pricer, File: prices}
+		log.Info("cost engine on", "priceRules", len(prices.Nodes), "referenceAPIs", len(prices.ReferenceAPIs))
+	}
 
 	if cfg.Rules {
 		rc := rules.DefaultConfig()

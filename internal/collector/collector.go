@@ -34,6 +34,8 @@ type Collector struct {
 	WarningWindow time.Duration
 	// Now is replaceable in tests.
 	Now func() time.Time
+	// Pricer fills in each snapshot's cost before it is saved (optional).
+	Pricer Pricer
 	// AfterCycle runs after every successful cycle with the snapshots it
 	// saved (possibly none). The rules engine hooks in here.
 	AfterCycle func(ctx context.Context, snaps []Snapshot)
@@ -43,6 +45,11 @@ type Collector struct {
 	lastErr         error
 	lastN           int
 	lastQueryErrors int
+}
+
+// Pricer adds cost to snapshots. The cost engine implements it.
+type Pricer interface {
+	Price(ctx context.Context, snaps []Snapshot)
 }
 
 // Status describes the last collection cycle.
@@ -194,6 +201,9 @@ func (c *Collector) CollectOnce(ctx context.Context) ([]Snapshot, error) {
 		}
 		snaps = append(snaps, c.build(now, servers[k], p, metrics[k]))
 	}
+	if c.Pricer != nil {
+		c.Pricer.Price(ctx, snaps)
+	}
 	return snaps, nil
 }
 
@@ -205,7 +215,7 @@ func (c *Collector) build(now time.Time, server string, p kube.PodInfo, m podMet
 		Phase: p.Phase, Ready: p.Ready, Restarts: p.Restarts,
 		WaitingReason: p.WaitingReason, LastTerminationReason: p.LastTerminationReason,
 		CPURequestCores: p.CPURequestCores, CPULimitCores: p.CPULimitCores,
-		MemoryLimitBytes: p.MemoryLimitBytes, GPURequest: p.GPURequest,
+		MemoryLimitBytes: p.MemoryLimitBytes, MemoryRequestBytes: p.MemoryRequestBytes, GPURequest: p.GPURequest,
 		Node: p.Node,
 	}
 	if !p.StartedAt.IsZero() && !p.ReadyAt.IsZero() && p.ReadyAt.After(p.StartedAt) {
@@ -216,7 +226,7 @@ func (c *Collector) build(now time.Time, server string, p kube.PodInfo, m podMet
 		s.WarningReason, s.WarningMessage = ev.Reason, ev.Message
 	}
 	if n, ok := c.Kube.Node(p.Node); ok {
-		s.NodeProvider, s.NodeInstanceType, s.NodeZone = n.Provider, n.InstanceType, n.Zone
+		s.NodeProvider, s.NodeInstanceType, s.NodeZone, s.NodeRegion = n.Provider, n.InstanceType, n.Zone, n.Region
 		s.NodeCapacityType, s.NodeCPUCores, s.NodeMemoryBytes, s.NodeGPUs = n.CapacityType, n.CPUCores, n.MemoryBytes, n.GPUs
 	}
 	get := func(name string) *float64 {

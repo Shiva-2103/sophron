@@ -216,7 +216,31 @@ h2{font-size:26px;font-weight:600;letter-spacing:-.2px}
     <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">Gone 90 s</div><div class="d">Resolved, no flapping</div></div>
   </div>
   <div class="legend">
-    <span>Read them: make findings &nbsp;·&nbsp; API: /api/v1/findings &nbsp;·&nbsp; Slack: next</span>
+    <span>Read them: make findings &nbsp;·&nbsp; API: /api/v1/findings &nbsp;·&nbsp; Slack alerts</span>
+  </div>
+</figure>
+
+<!-- 9. Cost engine -->
+<figure id="cost">
+  <h2>How a node's price becomes a cost per token</h2>
+  <p class="sub">Every dollar of every node lands in one place: a model, another pod, or idle.</p>
+  <div class="row">
+    <div class="box exist" style="width:200px;flex:none"><div class="t">Node price</div><div class="d">Node label, your price file, OpenCost, or default prices (marked estimate)</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="width:200px;flex:none"><div class="t">Split per resource</div><div class="d">$ per CPU core, per GiB, per GPU, in OpenCost's proportions</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="t">Charge each pod</div><div class="d">The larger of reserved and used, per resource. GPUs whole</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="width:190px;flex:none"><div class="t">Per model</div><div class="d">$ per hour, per month, per 1M tokens</div></div>
+  </div>
+  <div class="row" style="margin-top:26px;gap:12px">
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">Model pods</div><div class="d">What your LLMs cost</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">Other pods</div><div class="d">Their reservations</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--amber-ink)">Idle</div><div class="d">Paid for, used by nobody</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--amber-ink)">Down cost</div><div class="d">Paid while a model served nothing</div></div>
+  </div>
+  <div class="legend">
+    <span>Read it: make cost &nbsp;·&nbsp; make cost-models &nbsp;·&nbsp; make cost-nodes &nbsp;·&nbsp; API: /api/v1/cost/*</span>
   </div>
 </figure>
 

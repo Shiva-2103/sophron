@@ -52,6 +52,7 @@ type PodInfo struct {
 	CPURequestCores       float64
 	CPULimitCores         float64
 	MemoryLimitBytes      float64
+	MemoryRequestBytes    float64
 	GPURequest            int64
 	CreatedAt             time.Time
 	StartedAt             time.Time
@@ -64,10 +65,26 @@ type NodeInfo struct {
 	Provider     string // aws, gce, azure, kind, ...
 	InstanceType string
 	Zone         string
+	Region       string
 	CapacityType string // on-demand, spot, or empty
 	CPUCores     float64
 	MemoryBytes  float64
 	GPUs         int64
+	// Price set by the cluster owner on the node (label or annotation
+	// sophron.dev/hourly-price), in USD per hour. Empty when not set.
+	HourlyPrice string
+	Labels      map[string]string
+}
+
+// HourlyPriceKey is the node label or annotation that sets a node's price.
+const HourlyPriceKey = "sophron.dev/hourly-price"
+
+// Requests is what pods reserved on a node.
+type Requests struct {
+	CPUCores    float64
+	MemoryBytes float64
+	GPUs        int64
+	Pods        int
 }
 
 // Event is the latest warning event for a pod.
@@ -218,6 +235,48 @@ func (i *Informers) Node(name string) (NodeInfo, bool) {
 	return NodeInfoFrom(n), true
 }
 
+// Nodes returns every node, sorted by name.
+func (i *Informers) Nodes() []NodeInfo {
+	nodes, err := i.nodes.List(labels.Everything())
+	if err != nil {
+		return nil
+	}
+	out := make([]NodeInfo, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, NodeInfoFrom(n))
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].Name < out[b].Name })
+	return out
+}
+
+// NodeRequests adds up what running and pending pods on a node reserved.
+// Finished pods (Succeeded, Failed) no longer hold resources.
+func (i *Informers) NodeRequests(node string) Requests {
+	pods, err := i.pods.List(labels.Everything())
+	if err != nil {
+		return Requests{}
+	}
+	var r Requests
+	for _, p := range pods {
+		if p.Spec.NodeName != node || p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
+			continue
+		}
+		r.Pods++
+		for _, c := range p.Spec.Containers {
+			if q, ok := c.Resources.Requests[corev1.ResourceCPU]; ok {
+				r.CPUCores += q.AsApproximateFloat64()
+			}
+			if q, ok := c.Resources.Requests[corev1.ResourceMemory]; ok {
+				r.MemoryBytes += q.AsApproximateFloat64()
+			}
+			if q, ok := c.Resources.Limits["nvidia.com/gpu"]; ok {
+				r.GPUs += q.Value()
+			}
+		}
+	}
+	return r
+}
+
 // LastWarning returns the newest warning event for a pod, if any.
 func (i *Informers) LastWarning(key PodKey) (Event, bool) {
 	i.mu.RLock()
@@ -267,6 +326,9 @@ func PodInfoFrom(p *corev1.Pod) PodInfo {
 		if q, ok := c.Resources.Limits[corev1.ResourceMemory]; ok {
 			info.MemoryLimitBytes += q.AsApproximateFloat64()
 		}
+		if q, ok := c.Resources.Requests[corev1.ResourceMemory]; ok {
+			info.MemoryRequestBytes += q.AsApproximateFloat64()
+		}
 		if q, ok := c.Resources.Limits["nvidia.com/gpu"]; ok {
 			info.GPURequest += q.Value()
 		}
@@ -299,7 +361,13 @@ func NodeInfoFrom(n *corev1.Node) NodeInfo {
 		Provider:     provider(n.Spec.ProviderID),
 		InstanceType: first(l, "node.kubernetes.io/instance-type", "beta.kubernetes.io/instance-type"),
 		Zone:         first(l, "topology.kubernetes.io/zone", "failure-domain.beta.kubernetes.io/zone"),
+		Region:       first(l, "topology.kubernetes.io/region", "failure-domain.beta.kubernetes.io/region"),
 		CapacityType: capacityType(l),
+		HourlyPrice:  first(l, HourlyPriceKey),
+		Labels:       l,
+	}
+	if info.HourlyPrice == "" {
+		info.HourlyPrice = n.Annotations[HourlyPriceKey]
 	}
 	if q, ok := n.Status.Capacity[corev1.ResourceCPU]; ok {
 		info.CPUCores = q.AsApproximateFloat64()

@@ -111,6 +111,7 @@ func TestResolvedMessage(t *testing.T) {
 		Summary:   "Fixed by a change to the workload.",
 		Changes:   []string{"memory limit 512Mi → 6Gi", "1 of 1 pods Ready now"},
 		ChangedBy: "kubectl apply", ChangedAt: t0.Add(-2 * time.Minute),
+		DownSeconds: 240, DownCost: func() *float64 { v := 0.04; return &v }(),
 	}
 	m := s.Message(rules.Event{Type: rules.EventResolved, Finding: f})
 
@@ -125,7 +126,8 @@ func TestResolvedMessage(t *testing.T) {
 		t.Errorf("resolved message should say how long it was open: %s", all)
 	}
 	for _, want := range []string{"*How it was resolved*\\nFixed by a change", "• memory limit 512Mi → 6Gi",
-		"*Changed with*\\n`kubectl apply`\\n15 Nov 2026, 01:18 PM IST", "*Approved by*\\nNot needed"} {
+		"*Changed with*\\n`kubectl apply`\\n15 Nov 2026, 01:18 PM IST", "*Approved by*\\nNot needed",
+		"*Not serving for*\\n4m 0s", "*Cost while down*\\n$0.04"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("resolved message missing %q", want)
 		}

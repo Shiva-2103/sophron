@@ -10,8 +10,16 @@ import (
 	"time"
 
 	"github.com/Shiva-2103/sophron/internal/collector"
+	"github.com/Shiva-2103/sophron/internal/cost"
 	"github.com/Shiva-2103/sophron/internal/rules"
 )
+
+// CostReader is what the cost endpoints need. cost.Reporter implements it.
+type CostReader interface {
+	Models(ctx context.Context, window time.Duration) ([]cost.ModelCost, error)
+	Nodes(ctx context.Context) ([]cost.NodeCost, error)
+	Summary(ctx context.Context, window time.Duration) (cost.Summary, error)
+}
 
 // FindingsReader is the part of the store the findings API needs.
 type FindingsReader interface {
@@ -36,6 +44,9 @@ type Server struct {
 	Findings  FindingsReader
 	Rules     func() rules.Status
 	Detectors []rules.Detector
+
+	// Cost engine (optional).
+	Cost CostReader
 }
 
 // Handler returns the HTTP routes.
@@ -48,6 +59,9 @@ type Server struct {
 //	GET /api/v1/findings?status=open|resolved|all     problems Sophron found
 //	GET /api/v1/rules/status                          last rules engine run
 //	GET /api/v1/detectors                             what each detector looks for
+//	GET /api/v1/cost/summary?window=1h                spend, idle, cost per 1M tokens
+//	GET /api/v1/cost/models?window=1h                 cost and throughput per model
+//	GET /api/v1/cost/nodes                            each node: price, model, other, idle
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -67,6 +81,23 @@ func (s *Server) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, s.Rules())
 	})
+	mux.HandleFunc("GET /api/v1/cost/summary", s.costHandler(func(r *http.Request, w time.Duration) (any, error) {
+		return s.Cost.Summary(r.Context(), w)
+	}))
+	mux.HandleFunc("GET /api/v1/cost/models", s.costHandler(func(r *http.Request, w time.Duration) (any, error) {
+		m, err := s.Cost.Models(r.Context(), w)
+		if m == nil {
+			m = []cost.ModelCost{}
+		}
+		return m, err
+	}))
+	mux.HandleFunc("GET /api/v1/cost/nodes", s.costHandler(func(r *http.Request, _ time.Duration) (any, error) {
+		n, err := s.Cost.Nodes(r.Context())
+		if n == nil {
+			n = []cost.NodeCost{}
+		}
+		return n, err
+	}))
 	mux.HandleFunc("GET /api/v1/detectors", func(w http.ResponseWriter, _ *http.Request) {
 		type d struct {
 			Name        string `json:"name"`
@@ -178,6 +209,31 @@ func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
 		fs = []rules.Finding{}
 	}
 	writeJSON(w, http.StatusOK, fs)
+}
+
+// costHandler parses ?window= (default 1h, up to 7 days) and runs fn.
+func (s *Server) costHandler(fn func(r *http.Request, window time.Duration) (any, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.Cost == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "cost engine is off (--cost=false)"})
+			return
+		}
+		window := time.Hour
+		if v := r.URL.Query().Get("window"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil || d < 5*time.Minute || d > 7*24*time.Hour {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "window must be a duration from 5m to 168h, like 1h or 24h"})
+				return
+			}
+			window = d
+		}
+		v, err := fn(r, window)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, v)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
