@@ -59,7 +59,7 @@ func TestButtonsOnlyWhenInteractive(t *testing.T) {
 func TestClickNeedsAnApprover(t *testing.T) {
 	var mu sync.Mutex
 	var replies []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		var m map[string]any
 		_ = json.Unmarshal(b, &m)
