@@ -51,6 +51,7 @@ type session struct {
 type Auth struct {
 	accounts []account
 	ttl      time.Duration
+	insecure bool
 
 	mu       sync.Mutex
 	sessions map[string]session
@@ -62,11 +63,14 @@ type Config struct {
 	AdminPasswordFile  string // e.g. /etc/sophron/admin/password
 	ViewerPasswordFile string // optional
 	SessionTTL         time.Duration
+	// Lab only: let the session cookie work over plain http on a public
+	// address (browsers drop Secure cookies there). Never in production.
+	InsecureHTTP bool
 }
 
 // New reads the password files. Missing files are fine: that account is off.
 func New(c Config) (*Auth, error) {
-	a := &Auth{ttl: c.SessionTTL, sessions: map[string]session{}, failures: map[string][]time.Time{}}
+	a := &Auth{ttl: c.SessionTTL, insecure: c.InsecureHTTP, sessions: map[string]session{}, failures: map[string][]time.Time{}}
 	if a.ttl == 0 {
 		a.ttl = 12 * time.Hour
 	}
@@ -149,7 +153,7 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request, name, password stri
 	a.mu.Unlock()
 	// Secure always: browsers treat http://localhost (port-forward, SSM
 	// tunnel) as secure, and anything else should be behind HTTPS anyway.
-	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: token, Path: "/", HttpOnly: true, Secure: true,
+	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: token, Path: "/", HttpOnly: true, Secure: !a.insecure, //nolint:gosec // Secure unless the lab-only InsecureHTTP switch is on
 		SameSite: http.SameSiteStrictMode, MaxAge: int(a.ttl.Seconds())})
 	return u, nil
 }

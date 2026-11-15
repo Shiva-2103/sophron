@@ -10,7 +10,7 @@ MON_NS       := monitoring
 MON_RELEASE  := monitoring
 IMAGE        ?= sophron-collector:dev
 
-.PHONY: help admin-password dashboard dashboard-stop demo doctor fixes e2e-check savings cost cost-models cost-nodes cost-check slack-secret slack-test slack-off build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
+.PHONY: help admin-password dashboard dashboard-stop dashboard-3000 dashboard-3000-off dashboard-tunnel demo doctor fixes e2e-check savings cost cost-models cost-nodes cost-check slack-secret slack-test slack-off build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
 
 help: ## List available commands
 	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z0-9_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -99,6 +99,15 @@ dashboard: ## Serve the dashboard on port 8081 (prints the SSM port-forward for 
 
 dashboard-stop: ## Stop serving the dashboard
 	@bash $(LAB_DIR)/scripts/dashboard.sh stop
+
+dashboard-3000: ## No SSM? Serve the dashboard on port 3000 (Grafana's port and security group rule)
+	@bash $(LAB_DIR)/scripts/expose.sh port3000-on
+
+dashboard-3000-off: ## Put Grafana back on port 3000
+	@bash $(LAB_DIR)/scripts/expose.sh port3000-off
+
+dashboard-tunnel: ## No SSM, no security group? Public HTTPS link via a Cloudflare quick tunnel
+	@bash $(LAB_DIR)/scripts/expose.sh tunnel
 
 demo: ## Run the dashboard on sample data, no cluster needed (http://localhost:8090)
 	go run ./hack/demo

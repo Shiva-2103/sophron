@@ -38,6 +38,7 @@ type Config struct {
 	AdminPasswordFile  string
 	ViewerPasswordFile string
 	DashboardURL       string
+	InsecureHTTP       bool
 
 	ClusterName      string
 	Timezone         string
@@ -72,6 +73,7 @@ func Parse(args []string) (*Config, error) {
 	fs.StringVar(&c.PolicyFile, "policy-file", env("SOPHRON_POLICY_FILE", ""), "fix policy: auto/approve/never per action, allowed namespaces (empty: approve, no namespaces)")
 	fs.StringVar(&c.AdminPasswordFile, "admin-password-file", env("SOPHRON_ADMIN_PASSWORD_FILE", "/etc/sophron/admin/password"), "dashboard admin password file (missing: read-only, no approvals)")
 	fs.StringVar(&c.ViewerPasswordFile, "viewer-password-file", env("SOPHRON_VIEWER_PASSWORD_FILE", "/etc/sophron/admin/viewer-password"), "optional read-only viewer password file")
+	fs.BoolVar(&c.InsecureHTTP, "insecure-http-cookies", envBool("SOPHRON_INSECURE_HTTP_COOKIES", false), "lab only: allow sign-in over plain http on a public address")
 	fs.StringVar(&c.DashboardURL, "dashboard-url", env("SOPHRON_DASHBOARD_URL", ""), "dashboard address for links in alerts, e.g. http://localhost:8081")
 	fs.StringVar(&c.ClusterName, "cluster-name", env("SOPHRON_CLUSTER_NAME", "kubernetes"), "cluster name shown in alerts")
 	fs.StringVar(&c.Timezone, "timezone", env("SOPHRON_TIMEZONE", "UTC"), "time zone for times in alerts, e.g. Asia/Kolkata (UTC is shown too)")

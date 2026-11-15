@@ -114,12 +114,15 @@ func run() error {
 		log.Info("cost engine on", "priceRules", len(prices.Nodes), "referenceAPIs", len(prices.ReferenceAPIs))
 	}
 
-	authn, err := auth.New(auth.Config{AdminPasswordFile: cfg.AdminPasswordFile, ViewerPasswordFile: cfg.ViewerPasswordFile})
+	authn, err := auth.New(auth.Config{AdminPasswordFile: cfg.AdminPasswordFile, ViewerPasswordFile: cfg.ViewerPasswordFile, InsecureHTTP: cfg.InsecureHTTP})
 	if err != nil {
 		return err
 	}
 	apiSrv.Auth, apiSrv.ClusterName, apiSrv.UI = authn, cfg.ClusterName, web.FS()
 	apiSrv.AuditReader, apiSrv.AuditWriter = db, db
+	if cfg.InsecureHTTP {
+		log.Warn("sign-in cookies work over plain http (--insecure-http-cookies): lab use only")
+	}
 	if !authn.Enabled() {
 		log.Warn("no admin password set: the dashboard is read-only and fixes can't be approved")
 	}
