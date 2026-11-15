@@ -52,7 +52,7 @@ Weeks 7 to 9. Detect real failures.
 - [x] A chaos scenario for each failure (`make chaos SCENARIO=...`)
 - [x] Findings API and `make findings`
 - [x] `make rules-check` passes in the lab (all 6 scenarios)
-- [ ] Slack message with evidence and the suggested fix
+- [x] Slack message with evidence and the suggested fix (`make slack-secret`, `make slack-test`)
 
 Learn: turning runbooks into code, chaos testing, alerts that aren't noisy
 

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // time zones for alerts; the distroless image may not have them
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -25,6 +26,7 @@ import (
 	"github.com/Shiva-2103/sophron/internal/config"
 	"github.com/Shiva-2103/sophron/internal/kube"
 	"github.com/Shiva-2103/sophron/internal/mapping"
+	"github.com/Shiva-2103/sophron/internal/notify"
 	"github.com/Shiva-2103/sophron/internal/prom"
 	"github.com/Shiva-2103/sophron/internal/rules"
 	"github.com/Shiva-2103/sophron/internal/store"
@@ -46,6 +48,14 @@ func run() error {
 		return err
 	}
 	log := newLogger(cfg.LogLevel)
+
+	slack, err := newSlack(cfg, log)
+	if err != nil {
+		return err
+	}
+	if cfg.SendTestAlert {
+		return sendTestAlert(slack)
+	}
 
 	// Stop cleanly on Ctrl+C or when Kubernetes stops the pod (SIGTERM).
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -87,9 +97,17 @@ func run() error {
 	if cfg.Rules {
 		rc := rules.DefaultConfig()
 		rc.PendingAfter, rc.RolloutStuckAfter, rc.SlowStartAfter = cfg.PendingAfter, cfg.RolloutStuckAfter, cfg.SlowStartAfter
+		notifiers := []rules.Notifier{rules.LogNotifier{Log: log}}
+		if slack != nil {
+			go slack.Start(ctx)
+			notifiers = append(notifiers, slack)
+			log.Info("slack alerts on", "cluster", cfg.ClusterName, "minSeverity", cfg.SlackMinSeverity)
+		} else {
+			log.Info("slack alerts off (no webhook URL)")
+		}
 		engine := &rules.Engine{
 			Store: db, Detectors: rules.All(), Config: rc, Log: log,
-			Notifiers:    []rules.Notifier{rules.LogNotifier{Log: log}},
+			Notifiers:    notifiers,
 			ResolveAfter: cfg.ResolveAfter,
 		}
 		c.AfterCycle = func(ctx context.Context, snaps []collector.Snapshot) {
@@ -126,6 +144,40 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// newSlack returns the Slack notifier, or nil when no webhook is set.
+func newSlack(cfg *config.Config, log *slog.Logger) (*notify.Slack, error) {
+	if cfg.SlackWebhookURL == "" {
+		return nil, nil
+	}
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		return nil, err
+	}
+	return notify.NewSlack(notify.SlackConfig{
+		WebhookURL:  cfg.SlackWebhookURL,
+		Cluster:     cfg.ClusterName,
+		MinSeverity: rules.Severity(strings.ToLower(cfg.SlackMinSeverity)),
+		Location:    loc,
+		Cooldown:    cfg.SlackCooldown,
+	}, log)
+}
+
+// sendTestAlert posts a sample finding, so you can check the webhook and
+// see what an alert looks like.
+func sendTestAlert(slack *notify.Slack) error {
+	if slack == nil {
+		return errors.New("no Slack webhook URL: set SOPHRON_SLACK_WEBHOOK_URL (make slack-secret)")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	f := notify.SampleFinding(time.Now().UTC())
+	if err := slack.Send(ctx, rules.Event{Type: notify.EventTest, Finding: f}); err != nil {
+		return err
+	}
+	fmt.Println("test alert sent: check your Slack channel")
+	return nil
 }
 
 // kubeConfig uses the pod's service account inside a cluster, or a

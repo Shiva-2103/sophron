@@ -109,6 +109,20 @@ make rules-check              # all six, automatic PASS/FAIL (~25 min)
 
 Rebuild the collector first if it's older than Phase 3: `make collector-up`.
 
+## 9. Get alerts in Slack (Phase 3)
+
+1. In Slack: [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch** → name `Sophron`, pick your workspace.
+2. **Incoming Webhooks** → turn **On** → **Add New Webhook** → pick a channel (e.g. `#sophron-alerts`) → **Allow** → copy the URL.
+3. On the lab machine:
+
+```bash
+make slack-secret     # paste the URL into the hidden prompt; it becomes a Kubernetes Secret
+make slack-test       # a sample alert appears in the channel
+make chaos SCENARIO=oom   # a real one, about a minute later; make chaos-reset and a green "resolved" follows
+```
+
+> The webhook URL is a password. Never paste it into chat, a file or Git. Lost it or leaked it? Delete the webhook in the Slack app page and make a new one. `make slack-off` stops alerts.
+
 ## Commands
 
 | Command | Does |
@@ -126,6 +140,7 @@ Rebuild the collector first if it's older than Phase 3: `make collector-up`.
 | `make findings` / `detectors` | Problems found / what each detector checks |
 | `make chaos SCENARIO=...` / `chaos-reset` | Break the model server on purpose / undo |
 | `make rules-check` | Phase 3 check, all scenarios |
+| `make slack-secret` / `slack-test` / `slack-off` | Store the Slack webhook / send a sample alert / stop alerts |
 
 ## Save money
 

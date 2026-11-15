@@ -81,6 +81,20 @@ spec:
             - --prometheus-url=http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
             - --interval=30s
             - --db=/data/sophron.db
+          env:
+            - name: SOPHRON_CLUSTER_NAME
+              value: sophron-lab
+            - name: SOPHRON_TIMEZONE
+              value: Asia/Kolkata
+            # Slack alerts. The webhook URL is a secret, so it comes from a
+            # Secret (make slack-secret), never from this file. optional: the
+            # collector runs without it, with Slack off.
+            - name: SOPHRON_SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sophron-slack
+                  key: webhook-url
+                  optional: true
           ports:
             - name: http
               containerPort: 8080

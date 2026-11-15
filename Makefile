@@ -74,6 +74,15 @@ chaos-reset: ## Undo any chaos scenario
 rules-check: ## Phase 3 check: run each chaos scenario, verify the right detector fires (~25 min)
 	@bash $(LAB_DIR)/scripts/check-rules.sh $(SCENARIOS)
 
+slack-secret: ## Save the Slack webhook URL as a Kubernetes Secret (hidden prompt)
+	@bash $(LAB_DIR)/scripts/slack.sh secret
+
+slack-test: ## Send a sample alert to Slack
+	@bash $(LAB_DIR)/scripts/slack.sh test
+
+slack-off: ## Delete the Slack Secret (alerts stop)
+	@bash $(LAB_DIR)/scripts/slack.sh off
+
 ##@ Lab
 lab-tools: ## Install Docker, kind, kubectl, helm on Ubuntu (needs sudo, run once)
 	sudo bash $(LAB_DIR)/scripts/bootstrap-ubuntu.sh

@@ -24,3 +24,17 @@ func TestRejectsTooShortInterval(t *testing.T) {
 		t.Error("expected error")
 	}
 }
+
+func TestSlackSettings(t *testing.T) {
+	t.Setenv("SOPHRON_SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/T/B/x")
+	c, err := Parse([]string{"--timezone=Asia/Kolkata", "--cluster-name=prod-eu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SlackWebhookURL == "" || c.ClusterName != "prod-eu" || c.SlackMinSeverity != "warning" {
+		t.Errorf("unexpected config: cluster %q, min %q, url set %v", c.ClusterName, c.SlackMinSeverity, c.SlackWebhookURL != "")
+	}
+	if _, err := Parse([]string{"--timezone=Mars/Olympus"}); err == nil {
+		t.Error("want an error for an unknown time zone")
+	}
+}

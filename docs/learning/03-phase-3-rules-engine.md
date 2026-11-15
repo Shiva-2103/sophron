@@ -133,6 +133,67 @@ All warning and critical findings resolved after the reset.
 
 ---
 
+## ***Slack alerts***
+
+![A Sophron alert in Slack](../assets/slack.png)
+
+A finding nobody sees fixes nothing. The engine now hands every event (opened, escalated, resolved) to a **Slack notifier**, next to the log notifier.
+
+| Part | File | Job |
+|---|---|---|
+| Message template | `internal/notify/message.go` | Turns a finding into a Slack Block Kit message |
+| Sender | `internal/notify/slack.go` | Queue, filter, cooldown, retries |
+| Wiring and flags | `cmd/collector/main.go`, `internal/config/config.go` | Slack on when a webhook URL is set |
+| Secret wiring | `deploy/collector/collector.yaml` | Env var from the `sophron-slack` Secret, `optional: true` |
+| Lab helper | `lab/scripts/slack.sh` | `make slack-secret`, `slack-test`, `slack-off` |
+
+### The template
+
+Same idea as a good alert email: the subject decides whether you open it, the body tells you what to do.
+
+| Part | Shows | Why |
+|---|---|---|
+| Header | `🔴 CRITICAL · llm/llm-server is being killed…` | Severity and problem in one glance, even in a phone notification |
+| Colour bar | Red critical, orange warning, blue info, green resolved, purple test | Scan a busy channel by colour |
+| Facts (2 columns) | Status, Severity, Cluster, Workload, Pod, Detected | Where and when, without reading prose |
+| What's wrong | The finding's summary | Plain English for whoever is on call |
+| Evidence | Up to 10 bullets | Proof, so you trust it and can check it |
+| Suggested fix | Steps plus a copyable command | Go from alert to action in seconds |
+| Footer | Detector, finding #, "read-only: nothing was changed" | Traceable to the API, and says Sophron changed nothing |
+
+Times show in your zone with UTC alongside: `15 Nov 2026, 01:21 PM IST (07:51 UTC)`. Resolved messages stay short: how long it was open, no fix.
+
+### Rules that keep the channel quiet
+
+| Rule | Default | Flag / env |
+|---|---|---|
+| Minimum severity | `warning` (info stays in the API) | `--slack-min-severity` |
+| Cooldown: a problem that returns within it is not alerted again, and its "resolved" is skipped too | 10 min | `--slack-cooldown` |
+| Escalation always alerts | It got worse, so speak up | |
+| Pace | 1 message per second (Slack's webhook limit) | |
+
+### Sending safely
+
+- **Never blocks the engine.** `Notify` puts the event in a queue of 100 and returns. One background worker sends. If Slack is down and the queue fills, alerts are dropped with a warning, but detection keeps running.
+- **Retries only when it can help.** 429: waits for `Retry-After` (30 s max). 5xx or network error: backs off 1 s, 2 s. Other 4xx (`invalid_payload`, `channel_is_archived`): no retry. 3 attempts max.
+- **Escapes `& < >`.** A pod name or event message can't become a link or an `@channel`.
+- **Respects Slack limits.** Header 150 chars, sections 3,000; long text ends with "…".
+
+### The webhook URL is a password
+
+Anyone holding it can post to your channel.
+
+| Risk | What we do |
+|---|---|
+| In Git | Never. The manifest reads it from a Secret |
+| In shell history or `ps` | `make slack-secret` reads it with a hidden prompt (`read -s`) and pipes it with `printf` (a shell builtin) to `kubectl create secret --from-file=/dev/stdin` |
+| In logs | Go's HTTP errors include the URL. We unwrap `url.Error` and keep only the cause; a test checks the token never appears in an error |
+| Plain http | Rejected; https only (http allowed for `127.0.0.1` in tests) |
+
+> `optional: true` on the `secretKeyRef` means the collector starts without the Secret, with Slack off. Install first, add alerts later.
+
+---
+
 ## ***Commands***
 
 | Command | Does |
@@ -143,6 +204,9 @@ All warning and critical findings resolved after the reset.
 | `make chaos-list` | The scenarios |
 | `make chaos SCENARIO=oom` | Break one thing |
 | `make chaos-reset` | Put it back |
+| `make slack-secret` | Save the webhook URL as a Secret (hidden prompt), restart the collector |
+| `make slack-test` | Send a sample alert from inside the collector pod |
+| `make slack-off` | Delete the Secret, alerts stop |
 | `make rules-check` | All scenarios, PASS/FAIL (~25 min). One only: `make rules-check SCENARIOS=oom` |
 
 ---
@@ -154,6 +218,8 @@ All warning and critical findings resolved after the reset.
 | Prometheus alerting rules | Conditions with a `for:` duration, like our thresholds |
 | Kubernetes Event Exporter, Robusta | Turn Kubernetes events into readable alerts |
 | K8sGPT | Analyzers per resource type, each a small rule, like our detectors |
+| Alertmanager | Grouping, `repeat_interval` and inhibition: our cooldown and "one root problem, one finding" |
+| PagerDuty / Opsgenie alerts | Severity, summary, runbook link, and a "resolved" follow-up |
 | Netflix Chaos Monkey | Break things on purpose to prove you detect and survive them |
 
 ---
@@ -167,6 +233,9 @@ All warning and critical findings resolved after the reset.
 - A rollout is stuck with the old version still serving. What are the usual causes?
 - What does chaos testing prove that unit tests can't?
 - How do you add a column to a live SQLite database without losing data?
+- Where do you keep a Slack webhook URL, and how do you stop it leaking into logs?
+- Your alert sender hits a rate limit. What do you retry, and what don't you?
+- What makes an alert actionable instead of noise?
 
 ---
 
@@ -181,6 +250,10 @@ All warning and critical findings resolved after the reset.
 > | The slow-start check could miss the short "still starting" window (~40 s) between polls | Fake download raised to 210 s, and the check accepts either the "still starting" or the "took ... to start" title |
 > | staticcheck flagged an unused helper | Removed it |
 > | In the lab, the crash finding said "keeps crashing (0 restarts in 15m)" | The new pod crashed before our first snapshot of it, so "restarts now minus lowest seen" was 0. A pod created inside the window started at 0, so we use its total. Added a test |
+> | Go's HTTP client errors print the full request URL, which would log the webhook secret | Unwrap `*url.Error`, keep only the cause; test asserts the token never appears |
+> | `json.Marshal` turns `<` `>` `&` into `\u003c` etc., so an escaping test passed even when escaping was broken | The test encodes with `SetEscapeHTML(false)` to see the text the way Slack does |
+> | The distroless image may lack time zone data, so `Asia/Kolkata` could fail | Embedded it in the binary with `import _ "time/tzdata"` (~450 KB) |
+> | A function named `context` in the package clashed with the `context` import | Renamed it `contextBlock` |
 {.is-danger}
 
 > **Useful Links**
@@ -191,6 +264,10 @@ All warning and critical findings resolved after the reset.
 > - [llama.cpp server](https://github.com/ggml-org/llama.cpp/tree/master/tools/server)
 > - [Google SRE book: Monitoring distributed systems](https://sre.google/sre-book/monitoring-distributed-systems/)
 > - [Principles of chaos engineering](https://principlesofchaos.org/)
+> - [Slack incoming webhooks](https://api.slack.com/messaging/webhooks)
+> - [Slack Block Kit](https://api.slack.com/block-kit) and [Block Kit Builder](https://app.slack.com/block-kit-builder)
+> - [Slack rate limits](https://api.slack.com/apis/rate-limits)
+> - [Kubernetes Secrets as environment variables](https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables)
 {.is-info}
 
 -----

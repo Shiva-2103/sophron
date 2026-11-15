@@ -42,6 +42,8 @@ Planned once we test on GPUs and vLLM: `kv-cache-pressure`, `gpu-idle`.
 
 Each finding has a title, plain-English summary, evidence and a suggested fix. It stays open while the problem lasts and resolves 90 seconds after it's gone. See [the Phase 3 learning note](learning/03-phase-3-rules-engine.md).
 
+New, escalated and resolved findings go to Slack (`internal/notify`): a coloured card with the facts, evidence and fix. Warning and above by default, a 10-minute cooldown for problems that come back, retries that respect Slack's rate limit. The webhook URL lives in a Kubernetes Secret and is never logged.
+
 Why rules, not AI? Rules are free, work offline, can be tested, and never invent a risky action.
 
 Built with: Go, unit tests, plus chaos scenarios that trigger each failure on purpose (`make rules-check`)

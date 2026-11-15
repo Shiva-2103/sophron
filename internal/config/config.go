@@ -26,6 +26,13 @@ type Config struct {
 	RolloutStuckAfter time.Duration
 	SlowStartAfter    time.Duration
 	ResolveAfter      time.Duration
+
+	ClusterName      string
+	Timezone         string
+	SlackWebhookURL  string // a secret: never log it
+	SlackMinSeverity string
+	SlackCooldown    time.Duration
+	SendTestAlert    bool
 }
 
 // Parse reads flags from args (usually os.Args[1:]).
@@ -46,6 +53,12 @@ func Parse(args []string) (*Config, error) {
 	fs.DurationVar(&c.RolloutStuckAfter, "rollout-stuck-after", envDuration("SOPHRON_ROLLOUT_STUCK_AFTER", 3*time.Minute), "report rollouts whose new pod isn't Ready after this long")
 	fs.DurationVar(&c.SlowStartAfter, "slow-start-after", envDuration("SOPHRON_SLOW_START_AFTER", 2*time.Minute), "report pods taking longer than this to become Ready")
 	fs.DurationVar(&c.ResolveAfter, "resolve-after", envDuration("SOPHRON_RESOLVE_AFTER", 90*time.Second), "resolve a finding after it's gone for this long")
+	fs.StringVar(&c.ClusterName, "cluster-name", env("SOPHRON_CLUSTER_NAME", "kubernetes"), "cluster name shown in alerts")
+	fs.StringVar(&c.Timezone, "timezone", env("SOPHRON_TIMEZONE", "UTC"), "time zone for times in alerts, e.g. Asia/Kolkata (UTC is shown too)")
+	fs.StringVar(&c.SlackWebhookURL, "slack-webhook-url", env("SOPHRON_SLACK_WEBHOOK_URL", ""), "Slack incoming webhook URL; prefer the env var from a Secret (empty: Slack off)")
+	fs.StringVar(&c.SlackMinSeverity, "slack-min-severity", env("SOPHRON_SLACK_MIN_SEVERITY", "warning"), "send findings at or above this severity: info, warning or critical")
+	fs.DurationVar(&c.SlackCooldown, "slack-cooldown", envDuration("SOPHRON_SLACK_COOLDOWN", 10*time.Minute), "don't alert again for a problem that returns within this long")
+	fs.BoolVar(&c.SendTestAlert, "send-test-alert", false, "send a sample alert to Slack and exit")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -54,6 +67,9 @@ func Parse(args []string) (*Config, error) {
 	}
 	if c.Retention < time.Hour {
 		return nil, fmt.Errorf("retention must be at least 1h, got %s", c.Retention)
+	}
+	if _, err := time.LoadLocation(c.Timezone); err != nil {
+		return nil, fmt.Errorf("unknown timezone %q", c.Timezone)
 	}
 	return c, nil
 }
