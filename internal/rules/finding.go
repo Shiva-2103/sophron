@@ -67,6 +67,8 @@ type Finding struct {
 	FirstSeen  time.Time `json:"firstSeen"`
 	LastSeen   time.Time `json:"lastSeen"`
 	ResolvedAt time.Time `json:"resolvedAt,omitzero"`
+	// How it went away; set when resolved.
+	Resolution *Resolution `json:"resolution,omitempty"`
 }
 
 // Target is the object a finding is about: the workload when known

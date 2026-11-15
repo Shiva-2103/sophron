@@ -86,9 +86,10 @@ func TestMigrationAddsNewColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Simulate a Phase 2 database by dropping the new columns.
-	for _, c := range []string{"revision", "created_at", "started_at", "ready_at"} {
-		if _, err := s.db.Exec("ALTER TABLE snapshots DROP COLUMN " + c); err != nil {
+	// Simulate an older database by dropping the newer columns.
+	for _, c := range []string{"snapshots DROP COLUMN revision", "snapshots DROP COLUMN created_at",
+		"snapshots DROP COLUMN started_at", "snapshots DROP COLUMN ready_at", "findings DROP COLUMN resolution"} {
+		if _, err := s.db.Exec("ALTER TABLE " + c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -107,6 +108,9 @@ func TestMigrationAddsNewColumns(t *testing.T) {
 	got, err := s.Since(ctx, time.Now().Add(-time.Minute))
 	if err != nil || len(got) != 1 || got[0].Revision != "abc" || !got[0].CreatedAt.Equal(created) || !got[0].StartedAt.IsZero() {
 		t.Fatalf("got %+v, %v", got, err)
+	}
+	if _, err := s.Findings(ctx, "", 10); err != nil {
+		t.Fatalf("findings after migration: %v", err)
 	}
 }
 
@@ -143,7 +147,8 @@ func TestFindingsLifecycle(t *testing.T) {
 		t.Errorf("round trip lost data: %+v", g)
 	}
 
-	if err := s.ResolveFinding(ctx, id, now.Add(2*time.Minute)); err != nil {
+	res := &rules.Resolution{Summary: "Fixed by a change to the workload.", Changes: []string{"memory limit 512Mi → 6Gi"}, ChangedBy: "kubectl apply"}
+	if err := s.ResolveFinding(ctx, id, now.Add(2*time.Minute), res); err != nil {
 		t.Fatal(err)
 	}
 	if open, _ := s.OpenFindings(ctx); len(open) != 0 {
@@ -156,6 +161,9 @@ func TestFindingsLifecycle(t *testing.T) {
 	all, _ := s.Findings(ctx, "", 10)
 	resolved, _ := s.Findings(ctx, rules.StatusResolved, 10)
 	if len(all) != 2 || len(resolved) != 1 || resolved[0].ResolvedAt.IsZero() {
-		t.Errorf("all=%d resolved=%+v", len(all), resolved)
+		t.Fatalf("all=%d resolved=%+v", len(all), resolved)
+	}
+	if r := resolved[0].Resolution; r == nil || r.ChangedBy != "kubectl apply" || r.Changes[0] != "memory limit 512Mi → 6Gi" {
+		t.Errorf("resolution lost: %+v", r)
 	}
 }

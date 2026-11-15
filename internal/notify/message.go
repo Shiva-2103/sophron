@@ -158,17 +158,36 @@ func (s *Slack) resolvedCard(f rules.Finding) []Block {
 	if !f.FirstSeen.IsZero() {
 		open = humanDuration(end.Sub(f.FirstSeen))
 	}
-	return []Block{
-		fields(
-			"Status", "Resolved",
-			"Was", titleCase(string(f.Severity)),
-			"Cluster", s.cfg.Cluster,
-			"Workload", workload(f),
-			"Open for", open,
-			"Resolved", s.when(end),
-		),
-		contextBlock(s.footer(f)),
+	blocks := []Block{fields(
+		"Status", "Resolved",
+		"Was", titleCase(string(f.Severity)),
+		"Cluster", s.cfg.Cluster,
+		"Workload", workload(f),
+		"Open for", open,
+		"Resolved", s.when(end),
+	)}
+	if r := f.Resolution; r != nil {
+		var b strings.Builder
+		b.WriteString("*How it was resolved*\n" + esc(r.Summary))
+		for _, c := range r.Changes {
+			b.WriteString("\n• " + esc(c))
+		}
+		blocks = append(blocks, section(b.String()))
+
+		changed := "No change recorded"
+		switch {
+		case r.ChangedBy != "":
+			changed = code(r.ChangedBy) + "\n" + s.when(r.ChangedAt)
+		case strings.HasPrefix(r.Summary, "Cleared"):
+			changed = "Nothing: it cleared on its own"
+		}
+		approved := "Not needed: Sophron changed nothing"
+		if r.ApprovedBy != "" {
+			approved = esc(r.ApprovedBy)
+		}
+		blocks = append(blocks, fields("Changed with", changed, "Approved by", approved))
 	}
+	return append(blocks, contextBlock(s.footer(f)))
 }
 
 func (s *Slack) footer(f rules.Finding) string {

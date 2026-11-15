@@ -145,6 +145,7 @@ A finding nobody sees fixes nothing. The engine now hands every event (opened, e
 | Sender | `internal/notify/slack.go` | Queue, filter, cooldown, retries |
 | Wiring and flags | `cmd/collector/main.go`, `internal/config/config.go` | Slack on when a webhook URL is set |
 | Secret wiring | `deploy/collector/collector.yaml` | Env var from the `sophron-slack` Secret, `optional: true` |
+| Resolution | `internal/rules/resolution.go`, `internal/kube/changes.go` | How it went away, and with which tool |
 | Lab helper | `lab/scripts/slack.sh` | `make slack-secret`, `slack-test`, `slack-off` |
 
 ### The template
@@ -161,7 +162,27 @@ Same idea as a good alert email: the subject decides whether you open it, the bo
 | Suggested fix | Steps plus a copyable command | Go from alert to action in seconds |
 | Footer | Detector, finding #, "read-only: nothing was changed" | Traceable to the API, and says Sophron changed nothing |
 
-Times show in your zone with UTC alongside: `15 Nov 2026, 01:21 PM IST (07:51 UTC)`. Resolved messages stay short: how long it was open, no fix.
+Times show in your zone with UTC alongside: `15 Nov 2026, 01:21 PM IST (07:51 UTC)`.
+
+### How it was resolved
+
+A green "resolved" alone leaves you asking: did someone fix it, or did it go away by itself? So when a finding resolves, the engine compares the workload **when the problem was last seen** with **now**:
+
+| Check | Example line |
+|---|---|
+| New version? (pod-template-hash) | new version rolled out (revision 6c9d4f7b8 → 7b895f855b) |
+| Limits and requests | memory limit 512Mi → 6Gi, CPU request 4 → 2, GPU request 1 → 0 |
+| Pods Ready | 1 of 1 pods Ready now |
+| Queue (queue-backlog) | requests waiting 3 → 0 |
+| No pods at all | The workload was deleted or scaled to zero |
+
+Any spec change gives "**Fixed by a change to the workload.**" No change gives "**Cleared without a change**", with the likely reason (the queue drained, the pod got a node).
+
+**Changed with** comes from the Deployment's `managedFields`. Kubernetes records every write by the tool that sent it (`kubectl-client-side-apply`, `kubectl-patch`, `helm`, `argocd-controller`) and when. Sophron shows the newest one, only if it happened while the problem was open.
+
+> Kubernetes records the **tool**, not the **person**. The person is only in the API server audit log. That's why "Approved by" says "Not needed: Sophron changed nothing" today. When Sophron applies fixes after an approval (Phase 6), it fills in who approved.
+
+The resolution is saved with the finding (`resolution` column, added by migration) and returned by `/api/v1/findings`.
 
 ### Rules that keep the channel quiet
 
@@ -236,6 +257,7 @@ Anyone holding it can post to your channel.
 - Where do you keep a Slack webhook URL, and how do you stop it leaking into logs?
 - Your alert sender hits a rate limit. What do you retry, and what don't you?
 - What makes an alert actionable instead of noise?
+- How can you tell which tool last changed a Deployment? Can you tell which person?
 
 ---
 
@@ -253,6 +275,8 @@ Anyone holding it can post to your channel.
 > | Go's HTTP client errors print the full request URL, which would log the webhook secret | Unwrap `*url.Error`, keep only the cause; test asserts the token never appears |
 > | `json.Marshal` turns `<` `>` `&` into `\u003c` etc., so an escaping test passed even when escaping was broken | The test encodes with `SetEscapeHTML(false)` to see the text the way Slack does |
 > | The distroless image may lack time zone data, so `Asia/Kolkata` could fail | Embedded it in the binary with `import _ "time/tzdata"` (~450 KB) |
+> | Resolved alerts said nothing about how the problem went away | Compare the workload at last-seen vs now, and read `managedFields` for the tool that changed it (RBAC: `get` on Deployments, StatefulSets, DaemonSets, still read-only) |
+> | `managedFields` also lists status writes by Kubernetes controllers, which would always look newest | Skip entries with a `subresource` and `kube-controller-manager` |
 > | A function named `context` in the package clashed with the `context` import | Renamed it `contextBlock` |
 {.is-danger}
 
@@ -267,6 +291,8 @@ Anyone holding it can post to your channel.
 > - [Slack incoming webhooks](https://api.slack.com/messaging/webhooks)
 > - [Slack Block Kit](https://api.slack.com/block-kit) and [Block Kit Builder](https://app.slack.com/block-kit-builder)
 > - [Slack rate limits](https://api.slack.com/apis/rate-limits)
+> - [Server-side apply and managedFields](https://kubernetes.io/docs/reference/using-api/server-side-apply/#field-management)
+> - [Kubernetes audit logs](https://kubernetes.io/docs/tasks/debug/debug-cluster/audit/)
 > - [Kubernetes Secrets as environment variables](https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables)
 {.is-info}
 

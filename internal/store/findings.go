@@ -30,15 +30,19 @@ CREATE TABLE IF NOT EXISTS findings (
   status        TEXT NOT NULL,
   first_seen    INTEGER NOT NULL,
   last_seen     INTEGER NOT NULL,
-  resolved_at   INTEGER
+  resolved_at   INTEGER,
+  resolution    TEXT  -- JSON object, set when resolved
 );
 -- At most one open finding per key.
 CREATE UNIQUE INDEX IF NOT EXISTS findings_open_key ON findings (key) WHERE status = 'open';
 CREATE INDEX IF NOT EXISTS findings_last_seen ON findings (last_seen);
 `
 
+// Findings tables made before a column existed get it added on open.
+var findingMigrations = []column{{"resolution", "TEXT"}}
+
 const findingColumns = `id, key, detector, severity, namespace, pod, workload_kind, workload_name,
-  title, summary, evidence, fix, status, first_seen, last_seen, resolved_at`
+  title, summary, evidence, fix, status, first_seen, last_seen, resolved_at, resolution`
 
 // OpenFindings returns every open finding.
 func (s *Store) OpenFindings(ctx context.Context) ([]rules.Finding, error) {
@@ -86,10 +90,18 @@ func (s *Store) UpdateFinding(ctx context.Context, f rules.Finding) error {
 	return err
 }
 
-// ResolveFinding marks a finding as resolved.
-func (s *Store) ResolveFinding(ctx context.Context, id int64, at time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE findings SET status = 'resolved', resolved_at = ? WHERE id = ?`,
-		at.UnixMilli(), id)
+// ResolveFinding marks a finding as resolved, with how it went away.
+func (s *Store) ResolveFinding(ctx context.Context, id int64, at time.Time, r *rules.Resolution) error {
+	var res sql.NullString
+	if r != nil {
+		b, err := json.Marshal(r)
+		if err != nil {
+			return err
+		}
+		res = sql.NullString{String: string(b), Valid: true}
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE findings SET status = 'resolved', resolved_at = ?, resolution = ? WHERE id = ?`,
+		at.UnixMilli(), res, id)
 	return err
 }
 
@@ -127,11 +139,12 @@ func (s *Store) findings(ctx context.Context, q string, args ...any) ([]rules.Fi
 			f                                         rules.Finding
 			sev                                       string
 			pod, kind, name, summary, evidence, fixJS sql.NullString
+			resolution                                sql.NullString
 			first, last                               int64
 			resolved                                  sql.NullInt64
 		)
 		if err := rows.Scan(&f.ID, &f.Key, &f.Detector, &sev, &f.Namespace, &pod, &kind, &name,
-			&f.Title, &summary, &evidence, &fixJS, &f.Status, &first, &last, &resolved); err != nil {
+			&f.Title, &summary, &evidence, &fixJS, &f.Status, &first, &last, &resolved, &resolution); err != nil {
 			return nil, err
 		}
 		f.Severity = rules.Severity(sev)
@@ -145,6 +158,12 @@ func (s *Store) findings(ctx context.Context, q string, args ...any) ([]rules.Fi
 		if fixJS.String != "" {
 			if err := json.Unmarshal([]byte(fixJS.String), &f.Fix); err != nil {
 				return nil, fmt.Errorf("finding %d fix: %w", f.ID, err)
+			}
+		}
+		if resolution.String != "" {
+			f.Resolution = &rules.Resolution{}
+			if err := json.Unmarshal([]byte(resolution.String), f.Resolution); err != nil {
+				return nil, fmt.Errorf("finding %d resolution: %w", f.ID, err)
 			}
 		}
 		out = append(out, f)

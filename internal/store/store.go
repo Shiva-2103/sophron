@@ -79,7 +79,9 @@ var columns = []string{
 
 // migrations add columns introduced after the first release, so databases
 // created by an older collector keep working. Each entry is column -> type.
-var migrations = []struct{ column, typ string }{
+type column struct{ column, typ string }
+
+var migrations = []column{
 	{"revision", "TEXT"},
 	{"created_at", "INTEGER"},
 	{"started_at", "INTEGER"},
@@ -176,7 +178,7 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
 	}
-	if err := migrate(db); err != nil {
+	if err := migrate(db, "snapshots", migrations); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate schema: %w", err)
 	}
@@ -184,12 +186,17 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("create findings schema: %w", err)
 	}
+	if err := migrate(db, "findings", findingMigrations); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("migrate findings: %w", err)
+	}
 	return &Store{db: db}, nil
 }
 
-// migrate adds any missing snapshot columns.
-func migrate(db *sql.DB) error {
-	rows, err := db.Query("SELECT name FROM pragma_table_info('snapshots')")
+// migrate adds any missing columns to a table. Table and column names come
+// from constants in this package, never from input.
+func migrate(db *sql.DB, table string, cols []column) error {
+	rows, err := db.Query("SELECT name FROM pragma_table_info(?)", table)
 	if err != nil {
 		return err
 	}
@@ -205,12 +212,11 @@ func migrate(db *sql.DB) error {
 	if err := rows.Close(); err != nil {
 		return err
 	}
-	for _, m := range migrations {
+	for _, m := range cols {
 		if have[m.column] {
 			continue
 		}
-		// Column names come from the constant list above, never from input.
-		if _, err := db.Exec("ALTER TABLE snapshots ADD COLUMN " + m.column + " " + m.typ); err != nil {
+		if _, err := db.Exec("ALTER TABLE " + table + " ADD COLUMN " + m.column + " " + m.typ); err != nil { //nolint:gosec // constant names, see above
 			return err
 		}
 	}

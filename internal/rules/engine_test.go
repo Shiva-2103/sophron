@@ -38,8 +38,8 @@ func (m *memStore) UpdateFinding(_ context.Context, f Finding) error {
 	m.findings[f.ID] = &f
 	return nil
 }
-func (m *memStore) ResolveFinding(_ context.Context, id int64, at time.Time) error {
-	m.findings[id].Status, m.findings[id].ResolvedAt = StatusResolved, at
+func (m *memStore) ResolveFinding(_ context.Context, id int64, at time.Time, r *Resolution) error {
+	m.findings[id].Status, m.findings[id].ResolvedAt, m.findings[id].Resolution = StatusResolved, at, r
 	return nil
 }
 
@@ -114,8 +114,8 @@ func TestEngineLifecycle(t *testing.T) {
 	if st := step(45 * time.Second); st.Resolved != 1 || st.Open != 0 {
 		t.Fatalf("cycle 5: %+v", st)
 	}
-	if rec.events[len(rec.events)-1].Type != EventResolved {
-		t.Fatalf("want resolved event, got %+v", rec.events)
+	if last := rec.events[len(rec.events)-1]; last.Type != EventResolved || last.Finding.Resolution == nil {
+		t.Fatalf("want resolved event with a resolution, got %+v", rec.events)
 	}
 
 	// Comes back: a new finding, not the old one reopened.

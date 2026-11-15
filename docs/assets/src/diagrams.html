@@ -238,7 +238,7 @@ h2{font-size:26px;font-weight:600;letter-spacing:-.2px}
 </style>
 <figure id="slack">
   <h2>A Sophron alert in Slack</h2>
-  <div class="sub">Header says what and how bad. The card says why, the proof, and what to do. Resolved messages stay short.</div>
+  <div class="sub">Header says what and how bad. The card says why, the proof, and what to do. Resolved messages say what changed and with which tool.</div>
   <div class="sl">
     <div class="av">S</div>
     <div style="flex:1">
@@ -267,6 +267,10 @@ h2{font-size:26px;font-weight:600;letter-spacing:-.2px}
         <div class="grid">
           <div><b>Status</b><br>Resolved</div><div><b>Was</b><br>Critical</div><div><b>Cluster</b><br>sophron-lab</div>
           <div><b>Workload</b><br><code>deployment/llm-server</code></div><div><b>Open for</b><br>6m 30s</div><div><b>Resolved</b><br>15 Nov 2026, 01:28 PM IST (07:58 UTC)</div>
+        </div>
+        <div class="p"><b>How it was resolved</b><br>Fixed by a change to the workload.<br>• new version rolled out (revision 6c9d4f7b8 → 7b895f855b)<br>• memory limit 512Mi → 6Gi<br>• 1 of 1 pods Ready now</div>
+        <div class="grid">
+          <div><b>Changed with</b><br><code>kubectl apply</code><br>15 Nov 2026, 01:25 PM IST (07:55 UTC)</div><div><b>Approved by</b><br>Not needed: Sophron changed nothing</div>
         </div>
         <div class="ft">Automated message from <b>Sophron</b> · detector <code>oom-killed</code> · finding #12 · read-only: nothing was changed</div>
       </div>

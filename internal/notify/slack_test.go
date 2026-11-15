@@ -107,6 +107,11 @@ func TestResolvedMessage(t *testing.T) {
 	s, _ := newTestSlack(t, "https://hooks.slack.com/services/T/B/x")
 	f := SampleFinding(t0.Add(-6*time.Minute - 30*time.Second))
 	f.Status, f.ResolvedAt = rules.StatusResolved, t0
+	f.Resolution = &rules.Resolution{
+		Summary:   "Fixed by a change to the workload.",
+		Changes:   []string{"memory limit 512Mi → 6Gi", "1 of 1 pods Ready now"},
+		ChangedBy: "kubectl apply", ChangedAt: t0.Add(-2 * time.Minute),
+	}
 	m := s.Message(rules.Event{Type: rules.EventResolved, Finding: f})
 
 	if m.Attachments[0].Color != colorResolved {
@@ -118,6 +123,12 @@ func TestResolvedMessage(t *testing.T) {
 	all := dump(t, m)
 	if !strings.Contains(all, "*Open for*\\n6m 30s") {
 		t.Errorf("resolved message should say how long it was open: %s", all)
+	}
+	for _, want := range []string{"*How it was resolved*\\nFixed by a change", "• memory limit 512Mi → 6Gi",
+		"*Changed with*\\n`kubectl apply`\\n15 Nov 2026, 01:18 PM IST", "*Approved by*\\nNot needed"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("resolved message missing %q", want)
+		}
 	}
 	if strings.Contains(all, "Suggested fix") {
 		t.Error("resolved message should be short, without the fix")

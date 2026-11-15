@@ -17,7 +17,7 @@ type Store interface {
 	OpenFindings(ctx context.Context) ([]Finding, error)
 	InsertFinding(ctx context.Context, f Finding) (int64, error)
 	UpdateFinding(ctx context.Context, f Finding) error
-	ResolveFinding(ctx context.Context, id int64, at time.Time) error
+	ResolveFinding(ctx context.Context, id int64, at time.Time, r *Resolution) error
 }
 
 // Event types sent to notifiers.
@@ -45,7 +45,9 @@ type Engine struct {
 	Detectors []Detector
 	Config    Config
 	Notifiers []Notifier
-	Log       *slog.Logger
+	// Optional: finds which tool last changed a workload, for resolutions.
+	Changes ChangeFinder
+	Log     *slog.Logger
 	// A finding is resolved once it hasn't been seen for this long.
 	// Waiting a little avoids open/resolve/open flapping.
 	ResolveAfter time.Duration
@@ -153,17 +155,39 @@ func (e *Engine) process(ctx context.Context, latest []collector.Snapshot) (Stat
 		if now.Sub(f.LastSeen) < e.resolveAfter() {
 			continue
 		}
-		if err := e.Store.ResolveFinding(ctx, f.ID, now); err != nil {
+		res := e.resolution(ctx, f, in)
+		if err := e.Store.ResolveFinding(ctx, f.ID, now, &res); err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		f.Status, f.ResolvedAt = StatusResolved, now
+		f.Status, f.ResolvedAt, f.Resolution = StatusResolved, now, &res
 		st.Resolved++
 		e.notify(ctx, Event{Type: EventResolved, Finding: f})
 	}
 
 	st.Open = len(byKey) + st.Opened - st.Resolved
 	return st, errors.Join(errs...)
+}
+
+// resolution explains how a finding went away. Looking up who changed the
+// workload is best effort: a failure only leaves ChangedBy empty.
+func (e *Engine) resolution(ctx context.Context, f Finding, in Input) Resolution {
+	r := explainResolution(f, in)
+	if e.Changes == nil || f.WorkloadName == "" {
+		return r
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	manager, at, err := e.Changes.LastChange(ctx, f.WorkloadKind, f.Namespace, f.WorkloadName)
+	if err != nil {
+		e.Log.Debug("could not look up who changed the workload", "target", f.Target(), "error", err)
+		return r
+	}
+	// Only a change made while the problem was open can be the fix.
+	if manager != "" && !at.Before(f.FirstSeen.Add(-time.Second)) {
+		r.ChangedBy, r.ChangedAt = FriendlyManager(manager), at
+	}
+	return r
 }
 
 // safeDetect stops one buggy detector from taking the whole engine down.

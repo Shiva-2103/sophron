@@ -108,6 +108,7 @@ func run() error {
 		engine := &rules.Engine{
 			Store: db, Detectors: rules.All(), Config: rc, Log: log,
 			Notifiers:    notifiers,
+			Changes:      kube.Changes{Client: clientset},
 			ResolveAfter: cfg.ResolveAfter,
 		}
 		c.AfterCycle = func(ctx context.Context, snaps []collector.Snapshot) {

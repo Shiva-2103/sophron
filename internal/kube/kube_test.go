@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -159,5 +160,26 @@ func TestInformersEndToEnd(t *testing.T) {
 			t.Fatal("warning event not recorded")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestLastChange(t *testing.T) {
+	t1 := metav1.NewTime(time.Date(2026, 11, 15, 7, 0, 0, 0, time.UTC))
+	t2 := metav1.NewTime(t1.Add(10 * time.Minute))
+	t3 := metav1.NewTime(t1.Add(20 * time.Minute))
+	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "llm-server", Namespace: "llm",
+		ManagedFields: []metav1.ManagedFieldsEntry{
+			{Manager: "kubectl-client-side-apply", Operation: metav1.ManagedFieldsOperationUpdate, Time: &t1},
+			{Manager: "kubectl-patch", Operation: metav1.ManagedFieldsOperationUpdate, Time: &t2},
+			{Manager: "kube-controller-manager", Operation: metav1.ManagedFieldsOperationUpdate, Time: &t3, Subresource: "status"},
+			{Manager: "kube-controller-manager", Operation: metav1.ManagedFieldsOperationUpdate, Time: &t3},
+		}}}
+	c := Changes{Client: fake.NewClientset(dep)}
+	m, at, err := c.LastChange(context.Background(), "Deployment", "llm", "llm-server")
+	if err != nil || m != "kubectl-patch" || !at.Equal(t2.Time) {
+		t.Errorf("got %q %v %v, want kubectl-patch at %v", m, at, err, t2.Time)
+	}
+	if _, _, err := c.LastChange(context.Background(), "Job", "llm", "x"); err == nil {
+		t.Error("want an error for an unsupported kind")
 	}
 }
