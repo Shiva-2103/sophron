@@ -57,10 +57,11 @@ resolved || bad "finding #$fid did not resolve after 5 approved steps"
 
 step "5. The receipt"
 f=$(api '/findings?status=resolved&limit=20' | jq -c "[.[] | select(.id==$fid)][0]")
-echo "$f" | jq -r '"  " + .resolution.summary, (.resolution.changes[]? | "    • " + .), "  changed with: " + (.resolution.changedBy // "-"), "  approved by:  " + (.resolution.approvedBy // "-"), "  cost while down: " + ((.resolution.downCost // 0) | tostring)'
+echo "$f" | jq -r '"  " + .resolution.summary, (.resolution.changes[]? | "    • " + .), "  changed with: " + (.resolution.changedBy // "-"), "  approved by:  " + (.resolution.approvedBy // "-"), "  cost while down: $" + (((.resolution.downCost // 0) * 10000 | round) / 10000 | tostring)'
 [[ $(jq -r .resolution.approvedBy <<<"$f") == "admin" ]] && ok "the receipt names the approver" || bad "no approver on the receipt"
 verified=$(api '/fixes?status=verified' | jq "[.[] | select(.findingId==$fid)] | length")
-[[ "$verified" -ge 1 ]] && ok "$verified fix(es) verified" || bad "no verified fix"
+superseded=$(api '/fixes?status=superseded' | jq "[.[] | select(.findingId==$fid)] | length")
+[[ "$verified" -eq 1 ]] && ok "the last step is verified; $superseded earlier step(s) marked superseded" || bad "want exactly 1 verified fix, got $verified"
 audit=$(api /setup | jq -r '.[] | select(.name=="Audit log") | .status')
 [[ "$audit" == "ok" ]] && ok "audit log hash chain intact" || bad "audit chain: $audit"
 

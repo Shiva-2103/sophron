@@ -208,3 +208,12 @@ func (s *Store) VerifyAudit(ctx context.Context) (int64, error) {
 	}
 	return 0, rows.Err()
 }
+
+// PendingFix returns the fix waiting for a decision on a finding, if any.
+func (s *Store) PendingFix(ctx context.Context, findingID int64) (fixes.Request, bool) {
+	list, err := s.fixes(ctx, "SELECT "+fixColumns+" FROM fix_requests WHERE finding_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1", findingID)
+	if err != nil || len(list) == 0 {
+		return fixes.Request{}, false
+	}
+	return list[0], true
+}

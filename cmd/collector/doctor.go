@@ -103,10 +103,15 @@ func doctor(cfg *config.Config, p prom.Querier, c *collector.Collector, db *stor
 			add("Prices", "ok", "every pod has a real price", "")
 		}
 
-		if slack == nil {
+		switch {
+		case slack == nil:
 			add("Slack", "warn", "alerts go to the log only", "make slack-secret")
-		} else {
-			add("Slack", "ok", "alerts go to Slack", "")
+		case cfg.SlackAppToken == "":
+			add("Slack", "ok", "alerts go to Slack (approve in the dashboard; buttons need an app token)", "make slack-buttons")
+		case len(cfg.SlackApprovers) == 0:
+			add("Slack", "warn", "app token set, but nobody may approve from Slack, so no buttons", "make slack-approvers IDS=U0123ABCD")
+		default:
+			add("Slack", "ok", fmt.Sprintf("alerts with Approve/Deny buttons, %d approvers", len(cfg.SlackApprovers)), "")
 		}
 		if authn.Enabled() {
 			add("Login", "ok", "admin sign-in is on", "")

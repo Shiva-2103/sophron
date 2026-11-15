@@ -10,7 +10,7 @@ MON_NS       := monitoring
 MON_RELEASE  := monitoring
 IMAGE        ?= sophron-collector:dev
 
-.PHONY: help admin-password dashboard dashboard-stop dashboard-3000 dashboard-3000-off dashboard-tunnel demo doctor fixes e2e-check savings cost cost-models cost-nodes cost-check slack-secret slack-test slack-off build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
+.PHONY: help slack-buttons slack-approvers admin-password dashboard dashboard-stop dashboard-3000 dashboard-3000-off dashboard-tunnel demo doctor fixes e2e-check savings cost cost-models cost-nodes cost-check slack-secret slack-test slack-off build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
 
 help: ## List available commands
 	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z0-9_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -124,6 +124,12 @@ e2e-check: ## The whole loop: break, alert, approve, fixed, receipt (~5-15 min)
 ##@ Slack
 slack-secret: ## Save the Slack webhook URL as a Kubernetes Secret (hidden prompt)
 	@bash $(LAB_DIR)/scripts/slack.sh secret
+
+slack-buttons: ## Save the Slack app-level token (hidden prompt) for Approve/Deny buttons
+	@bash $(LAB_DIR)/scripts/slack.sh buttons
+
+slack-approvers: ## Who may approve from Slack: make slack-approvers IDS=U0123ABCD
+	@bash $(LAB_DIR)/scripts/slack.sh approvers "$(IDS)"
 
 slack-test: ## Send a sample alert to Slack
 	@bash $(LAB_DIR)/scripts/slack.sh test

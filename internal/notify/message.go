@@ -51,7 +51,7 @@ type Block struct {
 	Type     string `json:"type"`
 	Text     *Text  `json:"text,omitempty"`
 	Fields   []Text `json:"fields,omitempty"`
-	Elements []Text `json:"elements,omitempty"`
+	Elements []any  `json:"elements,omitempty"` // Text, or buttons in an actions block
 }
 
 // Text is a Block Kit text object.
@@ -74,6 +74,8 @@ func (s *Slack) Message(e rules.Event) Message {
 		label, status = "ESCALATED TO "+strings.ToUpper(string(sev)), "Open, got worse"
 	case EventTest:
 		label, color, status = "TEST", colorTest, "Test, no action needed"
+	case rules.EventActionChanged:
+		label, status = "NEXT STEP", "Open, the last fix wasn't enough"
 	}
 
 	title := f.Title
@@ -142,7 +144,11 @@ func (s *Slack) problemCard(f rules.Finding, status string, test bool) []Block {
 		if s.cfg.Dashboard != "" {
 			where = fmt.Sprintf("<%s/#/approvals|Approve or deny it in Sophron>", strings.TrimRight(s.cfg.Dashboard, "/"))
 		}
-		blocks = append(blocks, section("*Sophron can do this for you*\n"+esc(a.Summary)+"\n"+where))
+		if req, ok := s.pendingFix(f.ID); ok && s.cfg.Interactive {
+			blocks = append(blocks, section("*Sophron can do this for you*\n"+esc(a.Summary)), approveButtons(req.ID, a.Summary))
+		} else {
+			blocks = append(blocks, section("*Sophron can do this for you*\n"+esc(a.Summary)+"\n"+where))
+		}
 	}
 	if snip := strings.TrimSpace(f.Fix.Snippet); snip != "" {
 		// Leave room for the fences.
@@ -210,7 +216,7 @@ func (s *Slack) footer(f rules.Finding) string {
 	if f.ID > 0 {
 		id = fmt.Sprintf(" · finding #%d", f.ID)
 	}
-	return fmt.Sprintf("Automated message from *Sophron* · detector `%s`%s · read-only: nothing was changed", esc(f.Detector), id)
+	return fmt.Sprintf("Automated message from *Sophron* · detector `%s`%s · nothing changes until someone approves", esc(f.Detector), id)
 }
 
 // when formats a time like the alert emails do:
@@ -247,7 +253,7 @@ func section(md string) Block {
 }
 
 func contextBlock(md string) Block {
-	return Block{Type: "context", Elements: []Text{{Type: "mrkdwn", Text: truncate(md, fieldLimit)}}}
+	return Block{Type: "context", Elements: []any{Text{Type: "mrkdwn", Text: truncate(md, fieldLimit)}}}
 }
 
 func code(s string) string {
@@ -288,6 +294,8 @@ func icon(event string, s rules.Severity) string {
 		return "✅"
 	case rules.EventEscalate:
 		return "⏫"
+	case rules.EventActionChanged:
+		return "🔁"
 	case EventTest:
 		return "🧪"
 	}
@@ -353,4 +361,21 @@ func SampleFinding(now time.Time) rules.Finding {
 		},
 		Status: rules.StatusOpen, FirstSeen: now, LastSeen: now,
 	}
+}
+
+// Button action IDs, matched when Slack sends the click back.
+const (
+	ActionApprove = "sophron_approve"
+	ActionDeny    = "sophron_deny"
+)
+
+func approveButtons(id int64, summary string) Block {
+	value := fmt.Sprint(id)
+	pt := func(t string) Text { return Text{Type: "plain_text", Text: t} }
+	return Block{Type: "actions", Elements: []any{
+		map[string]any{"type": "button", "action_id": ActionApprove, "value": value, "style": "primary", "text": pt("Approve fix"),
+			"confirm": map[string]any{"title": pt("Apply this fix?"), "text": Text{Type: "mrkdwn", Text: truncate(esc(summary), 300)},
+				"confirm": pt("Approve"), "deny": pt("Cancel")}},
+		map[string]any{"type": "button", "action_id": ActionDeny, "value": value, "style": "danger", "text": pt("Deny")},
+	}}
 }

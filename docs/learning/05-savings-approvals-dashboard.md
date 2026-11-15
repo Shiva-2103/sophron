@@ -55,6 +55,20 @@ Every step is an audit entry: requested, approved, applied, failed, verified, ob
 
 ---
 
+## ***Approving from Slack***
+
+Alerts with a fix carry **Approve fix** (with a confirm dialog) and **Deny** buttons.
+
+| Piece | How |
+|---|---|
+| Transport | Slack Socket Mode: Sophron opens a WebSocket to Slack, so the cluster needs no public URL |
+| Token | An app-level token (`xapp-…`, scope `connections:write`) in the `sophron-slack` Secret, mounted as a file |
+| Who may approve | Only Slack member IDs in `SOPHRON_SLACK_APPROVERS`; anyone else gets a private "you're not an approver" |
+| What's recorded | The audit log says `slack:<username>` approved it; the channel gets "✅ Fix #2 approved by …" |
+| Next steps | If a fix isn't enough, a 🔁 NEXT STEP alert arrives with buttons for the bigger step |
+
+---
+
 ## ***Security***
 
 | Layer | How |
@@ -119,6 +133,9 @@ Confidence is **high** with 7 days and 1,000+ samples, **medium** with a day, **
 > | The lab scripts broke once the API required sign-in | `lab/scripts/auth.sh` reads the admin password from the Secret into memory and passes it to curl |
 > | Snapshots didn't know which container to change | Snapshots now carry the container that last failed, else the first one |
 > | A failed login (401) bounced back to the login form and lost the error | The API client only redirects on 401 for calls other than login |
+> | In the first lab run, the two memory steps that weren't enough were also marked "verified" | Steps a follow-up replaces become **superseded**; only the step that ends the problem is verified |
+> | The receipt said "1.2Gi" for 1280Mi | Quantities that aren't whole GiB print in Mi |
+> | Anyone in the Slack channel could press Approve | Only Slack member IDs on the approvers list can; others get a private refusal |
 > | Couldn't download Helm in the build sandbox | CI lints and renders the chart, then validates it with kubeconform |
 {.is-danger}
 

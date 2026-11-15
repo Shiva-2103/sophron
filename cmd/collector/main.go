@@ -151,6 +151,11 @@ func run() error {
 		}
 		if slack != nil {
 			go slack.Start(ctx)
+			if manager != nil && cfg.SlackAppToken != "" && len(cfg.SlackApprovers) > 0 {
+				slack.UseFixes(db)
+				go slack.RunApprovals(ctx, cfg.SlackAppToken, manager)
+				log.Info("slack approve/deny buttons on", "approvers", len(cfg.SlackApprovers))
+			}
 			notifiers = append(notifiers, slack)
 			log.Info("slack alerts on", "cluster", cfg.ClusterName, "minSeverity", cfg.SlackMinSeverity)
 		} else {
@@ -217,6 +222,8 @@ func newSlack(cfg *config.Config, log *slog.Logger) (*notify.Slack, error) {
 		Location:    loc,
 		Cooldown:    cfg.SlackCooldown,
 		Dashboard:   cfg.DashboardURL,
+		Interactive: cfg.SlackAppToken != "" && len(cfg.SlackApprovers) > 0,
+		Approvers:   cfg.SlackApprovers,
 	}, log)
 }
 

@@ -94,11 +94,11 @@ Weeks 17 to 20. Fix things with a human in the loop.
 
 - [x] Policy with auto, approve and never, per action and namespace
 - [x] Approve or deny from the dashboard (Slack links to it)
-- [ ] Approve or deny inside Slack (needs Slack Socket Mode)
+- [x] Approve or deny inside Slack (Socket Mode, approvers list)
 - [x] Audit log page, hash-chained
 - [x] A "never" action can't run, whatever happens (tested)
 - [x] Follow-up steps when a fix isn't enough
-- [ ] `make e2e-check` passes in the lab
+- [x] `make e2e-check` passes in the lab (3 approved steps: 512Mi → 768Mi → 1280Mi → 2Gi)
 
 Learn: operators, custom resources, safe automation
 

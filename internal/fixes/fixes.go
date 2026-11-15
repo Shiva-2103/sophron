@@ -34,7 +34,9 @@ const (
 	StatusFailed   = "failed"   // the change could not be made
 	StatusVerified = "verified" // change made and the problem went away
 	StatusObsolete = "obsolete" // the problem went away before anyone acted
-	StatusBlocked  = "blocked"  // policy says never
+	// Applied, but the problem stayed and a bigger step was proposed.
+	StatusSuperseded = "superseded"
+	StatusBlocked    = "blocked" // policy says never
 )
 
 // Policy modes.
@@ -185,6 +187,16 @@ func (m *Manager) Notify(ctx context.Context, e rules.Event) error {
 				return nil
 			}
 		}
+		// Earlier steps helped (maybe) but didn't solve it on their own.
+		for _, r := range reqs {
+			if r.Status == StatusApplied {
+				r.Status = StatusSuperseded
+				if err := m.Store.UpdateFix(ctx, r); err != nil {
+					return err
+				}
+				m.audit(ctx, "sophron", "fix.superseded", r, "applied, but the problem is still there; proposing a bigger step")
+			}
+		}
 		return m.propose(ctx, f)
 	case rules.EventResolved:
 		return m.close(ctx, f)
@@ -318,7 +330,7 @@ func (m *Manager) ApprovedFor(ctx context.Context, findingID int64) (string, tim
 		return "", time.Time{}, false
 	}
 	for _, r := range reqs {
-		if r.Status == StatusApplied || r.Status == StatusVerified {
+		if r.Status == StatusApplied || r.Status == StatusVerified || r.Status == StatusSuperseded {
 			return r.DecidedBy, r.AppliedAt, true
 		}
 	}

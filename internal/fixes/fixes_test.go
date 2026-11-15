@@ -221,4 +221,13 @@ func TestFollowUpWhenActionChanges(t *testing.T) {
 	if len(pending) != 1 || pending[0].Action.Value != "1152Mi" {
 		t.Errorf("want a follow-up for 1152Mi, got %+v", pending)
 	}
+	if r, _ := db.Fix(ctx, first[0].ID); r.Status != fixes.StatusSuperseded {
+		t.Errorf("the step that didn't solve it should be superseded, got %s", r.Status)
+	}
+	// The follow-up works: only it is verified.
+	_, _ = m.Approve(ctx, pending[0].ID, "shiva", "")
+	_ = m.Notify(ctx, rules.Event{Type: rules.EventResolved, Finding: f})
+	if v, _ := db.Fixes(ctx, fixes.StatusVerified, 10); len(v) != 1 || v[0].ID != pending[0].ID {
+		t.Errorf("want only the last step verified, got %+v", v)
+	}
 }

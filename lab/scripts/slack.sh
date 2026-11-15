@@ -43,13 +43,41 @@ case "${1:-}" in
     # The pod already has the URL in its mounted Secret, so we never handle it here.
     kubectl -n "$ns" exec "$deploy" -- /sophron-collector --send-test-alert
     ;;
+  buttons)
+    read -rsp "Paste the Slack app-level token (xapp-..., input hidden), then press Enter: " tok
+    echo
+    tok="${tok//[[:space:]]/}"
+    if [[ "$tok" != xapp-* ]]; then
+      echo "That doesn't look like an app-level token (it starts with xapp-). Nothing saved." >&2
+      exit 1
+    fi
+    if ! kubectl -n "$ns" get secret "$secret" >/dev/null 2>&1; then
+      echo "Set the webhook first: make slack-secret" >&2
+      exit 1
+    fi
+    # Through stdin, so the token never appears in the process list.
+    printf '{"stringData":{"app-token":"%s"}}' "$tok" | kubectl -n "$ns" patch secret "$secret" --patch-file=/dev/stdin >/dev/null
+    unset tok
+    echo "App token saved in $ns/$secret. Next: make slack-approvers IDS=<your Slack member ID>"
+    restart
+    ;;
+  approvers)
+    ids="${2:-}"
+    if [[ -z "$ids" ]]; then
+      echo "usage: make slack-approvers IDS=U0123ABCD[,U0456EFGH]  (Slack: your profile → ⋮ → Copy member ID)" >&2
+      exit 1
+    fi
+    kubectl -n "$ns" set env "$deploy" SOPHRON_SLACK_APPROVERS="$ids" >/dev/null
+    kubectl -n "$ns" rollout status "$deploy" --timeout=120s
+    echo "Slack approvers: $ids"
+    ;;
   off)
     kubectl -n "$ns" delete secret "$secret" --ignore-not-found
     restart
     echo "Slack alerts are off."
     ;;
   *)
-    echo "usage: $0 secret|test|off" >&2
+    echo "usage: $0 secret|buttons|approvers IDS|test|off" >&2
     exit 1
     ;;
 esac

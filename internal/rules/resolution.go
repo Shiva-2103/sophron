@@ -229,13 +229,10 @@ func quantityChange(what string, before, now float64, format func(float64) strin
 // quantity prints bytes the way Kubernetes manifests do: 512Mi, 6Gi.
 func quantity(b float64) string {
 	const mi, gi = 1 << 20, 1 << 30
-	switch {
-	case b >= gi && math.Mod(b, gi) == 0:
+	if b >= gi && math.Mod(b, gi) == 0 {
 		return fmt.Sprintf("%.0fGi", b/gi)
-	case b >= gi:
-		return fmt.Sprintf("%.1fGi", b/gi)
 	}
-	return fmt.Sprintf("%.0fMi", b/mi)
+	return fmt.Sprintf("%.0fMi", b/mi) // 1280Mi, not 1.2Gi
 }
 
 // FriendlyManager turns a field manager name into what a person typed.

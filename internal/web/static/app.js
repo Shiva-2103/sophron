@@ -116,7 +116,7 @@
       "rollout-stuck": "rollout stuck", "slow-cold-start": "slow start", "queue-backlog": "queue backing up" };
     return m[f.detector] || f.detector;
   }
-  const FIX_STATUS = { pending: "warn", approved: "info", applied: "info", verified: "good", denied: "muted", obsolete: "muted", blocked: "muted", failed: "crit" };
+  const FIX_STATUS = { pending: "warn", approved: "info", applied: "info", verified: "good", denied: "muted", obsolete: "muted", superseded: "muted", blocked: "muted", failed: "crit" };
   const fixChip = (s) => `<span class="chip ${FIX_STATUS[s] || "muted"}">${s === "failed" ? "▲ " : '<span class="dot"></span>'}${esc(s)}</span>`;
 
   // ---------- shell ----------

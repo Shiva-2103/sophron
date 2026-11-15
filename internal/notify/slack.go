@@ -34,6 +34,10 @@ type SlackConfig struct {
 	Cooldown time.Duration
 	// Dashboard address, for "approve it here" links. Optional.
 	Dashboard string
+	// Approve/Deny buttons: needs an app-level token (Socket Mode) and the
+	// Slack member IDs allowed to press them.
+	Interactive bool
+	Approvers   []string
 }
 
 // Slack sends findings to a Slack channel through an incoming webhook.
@@ -54,6 +58,7 @@ type Slack struct {
 	lastSent map[string]time.Time // finding key → when its last alert went out
 	muted    map[string]bool      // keys whose repeat alert was skipped
 	state    AlertState           // optional: keeps the two maps across restarts
+	pending  PendingFinder        // optional: fix requests, for buttons
 }
 
 // AlertMark is what the cooldown remembers about one finding key.
@@ -198,8 +203,10 @@ func (s *Slack) wanted(e rules.Event) bool {
 			delete(s.muted, f.Key)
 			return false
 		}
+	case rules.EventActionChanged:
+		return true // the last fix wasn't enough: say so, with the next step
 	default:
-		return false // e.g. action-changed: not worth a message
+		return false
 	}
 	return true
 }

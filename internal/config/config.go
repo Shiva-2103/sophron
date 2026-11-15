@@ -44,6 +44,8 @@ type Config struct {
 	Timezone         string
 	SlackWebhookURL  string // a secret: never log it
 	SlackWebhookFile string // file holding the URL (a mounted Secret); wins over SlackWebhookURL
+	SlackAppToken    string // xapp- token for Approve/Deny buttons (Socket Mode); a secret
+	SlackApprovers   []string
 	SlackMinSeverity string
 	SlackCooldown    time.Duration
 	SendTestAlert    bool
@@ -79,6 +81,8 @@ func Parse(args []string) (*Config, error) {
 	fs.StringVar(&c.Timezone, "timezone", env("SOPHRON_TIMEZONE", "UTC"), "time zone for times in alerts, e.g. Asia/Kolkata (UTC is shown too)")
 	fs.StringVar(&c.SlackWebhookURL, "slack-webhook-url", env("SOPHRON_SLACK_WEBHOOK_URL", ""), "Slack incoming webhook URL; prefer the env var from a Secret (empty: Slack off)")
 	fs.StringVar(&c.SlackWebhookFile, "slack-webhook-file", env("SOPHRON_SLACK_WEBHOOK_FILE", ""), "file containing the Slack webhook URL, e.g. a mounted Secret (missing file: Slack off)")
+	appTokenFile := fs.String("slack-app-token-file", env("SOPHRON_SLACK_APP_TOKEN_FILE", "/etc/sophron/slack/app-token"), "Slack app-level token (xapp-...) for Approve/Deny buttons; missing: no buttons")
+	approvers := fs.String("slack-approvers", env("SOPHRON_SLACK_APPROVERS", ""), "comma-separated Slack member IDs allowed to approve fixes from Slack (e.g. U0123ABCD)")
 	fs.StringVar(&c.SlackMinSeverity, "slack-min-severity", env("SOPHRON_SLACK_MIN_SEVERITY", "warning"), "send findings at or above this severity: info, warning or critical")
 	fs.DurationVar(&c.SlackCooldown, "slack-cooldown", envDuration("SOPHRON_SLACK_COOLDOWN", 10*time.Minute), "don't alert again for a problem that returns within this long")
 	fs.BoolVar(&c.SendTestAlert, "send-test-alert", false, "send a sample alert to Slack and exit")
@@ -98,6 +102,14 @@ func Parse(args []string) (*Config, error) {
 			c.SlackWebhookURL = strings.TrimSpace(string(b))
 		case !errors.Is(err, iofs.ErrNotExist):
 			return nil, fmt.Errorf("read slack webhook file: %w", err)
+		}
+	}
+	if b, err := os.ReadFile(*appTokenFile); err == nil { //nolint:gosec // path comes from the operator's flag
+		c.SlackAppToken = strings.TrimSpace(string(b))
+	}
+	for _, a := range strings.Split(*approvers, ",") {
+		if a = strings.TrimSpace(a); a != "" {
+			c.SlackApprovers = append(c.SlackApprovers, a)
 		}
 	}
 	if _, err := time.LoadLocation(c.Timezone); err != nil {
