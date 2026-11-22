@@ -4,17 +4,17 @@ Prudent operations for self-hosted LLMs on Kubernetes.
 
 *Sophron* (σώφρων) is Greek for "prudent". Kubernetes is the helmsman that steers your workloads. Sophron keeps your self-hosted LLMs cheap, healthy and safe to change.
 
-> Status: **v0.1.1**. Tested end to end in the lab: 6 detectors, Slack alerts with Approve/Deny buttons, cost per model and per 1M tokens, savings, fixes with policy + approval + a hash-chained audit log, and a dashboard.
+> Status: **v0.1.2**. Tested end to end in the lab: 6 detectors, Slack alerts with Approve/Deny buttons, cost per model and per 1M tokens, savings, fixes with policy + approval + a hash-chained audit log, and a dashboard.
 
 ![Sophron: a problem, a fix waiting for approval, approve, the receipt](docs/assets/demo.gif)
 
 ## Quickstart
 
-You need a Kubernetes cluster with Prometheus (for example [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)) and a model server that exposes metrics (vLLM, llama.cpp with `--metrics`), or any pod labelled `sophron.dev/model-server`.
+You need a Kubernetes cluster (EKS, AKS, GKE, kind, anything) with Prometheus (for example [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)) and a model server that exposes metrics (vLLM, llama.cpp with `--metrics`), or any pod labelled `sophron.dev/model-server`.
 
 ```bash
-# 1. Install (fixes allowed only in the namespaces you list)
-helm install sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.1 \
+# 1. Install. One pod: collector, detectors, cost engine, fixes, dashboard.
+helm install sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.2 \
   --namespace sophron --create-namespace \
   --set clusterName=my-cluster --set 'policy.namespaces={llm}'
 
@@ -25,15 +25,37 @@ kubectl -n sophron get secret sophron-admin -o jsonpath='{.data.password}' | bas
 kubectl -n sophron port-forward svc/sophron 8081:8080
 ```
 
-Then open **Setup**: it checks Prometheus, token and container metrics, prices, Slack, sign-in and fix permissions, and tells you the fix for anything missing.
+No login to any registry and no Slack needed. Then open **Setup**: it checks Prometheus, token and container metrics, prices, Slack, sign-in and fix permissions, and tells you the fix for anything missing.
+
+### Slack (optional, any time)
+
+Without Slack, everything works in the dashboard. To get alerts, and Approve/Deny buttons in Slack, put your Slack app's secrets in a Secret, then point the chart at it:
+
+```bash
+# Alerts: the app's incoming webhook URL (typed at a hidden prompt, never in your shell history)
+read -rsp "Slack webhook URL: " HOOK; echo
+# Buttons (optional): an app-level token xapp-... with connections:write, Socket Mode and Interactivity on
+read -rsp "Slack app token (Enter to skip): " APPTOKEN; echo
+kubectl -n sophron create secret generic sophron-slack \
+  --from-literal=webhook-url="$HOOK" ${APPTOKEN:+--from-literal=app-token="$APPTOKEN"}
+unset HOOK APPTOKEN
+
+# Turn it on; approvers are the Slack member IDs allowed to press Approve/Deny
+helm upgrade sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.2 -n sophron --reuse-values \
+  --set slack.existingSecret=sophron-slack --set 'slack.approvers={U0123ABCD}'
+```
+
+Leave out the app token and the approvers, and you get alerts with a link to the dashboard instead of buttons. Remove the Secret and alerts stop; nothing else changes.
 
 | Setting | Default | Example |
 |---|---|---|
+| `clusterName` | `kubernetes` | shown in alerts and the dashboard |
 | `prometheus.url` | `http://prometheus-operated.monitoring.svc:9090` | your Prometheus service |
 | `policy.namespaces` | none: fixes blocked everywhere | `{llm,chat}` |
 | `policy.default` | `approve` | `never` for read-only, `auto` per action |
 | `pricing.nodes` | node label, then OpenCost, then estimates | `[{name: "gpu-*", hourly: 0.8048}]` |
-| `slack.existingSecret` | off | a Secret with key `webhook-url` |
+| `slack.existingSecret` / `slack.approvers` | off | `sophron-slack` / `{U0123ABCD}` |
+| `auth.existingSecret` | generated | your own Secret with `password`, `viewer-password` |
 | `timezone` | `UTC` | `Asia/Kolkata` |
 
 All settings: [`charts/sophron/values.yaml`](charts/sophron/values.yaml).
