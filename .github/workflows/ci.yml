@@ -140,7 +140,9 @@ jobs:
           kubectl create namespace llm
           helm install sophron charts/sophron --namespace sophron --create-namespace \
             --set image.tag=ci --set image.pullPolicy=Never \
-            --set clusterName=ci --set 'policy.namespaces={llm}' --wait --timeout 4m
+            --set clusterName=ci --set 'policy.namespaces={llm}' \
+            --set 'pricing.nodes[0].name=fresh-*' --set 'pricing.nodes[0].hourly=0.1109' \
+            --wait --timeout 4m
       - name: A labelled model pod is discovered (no Prometheus needed)
         run: |
           kubectl -n llm run fake-model --image=busybox:1.37 --labels=sophron.dev/model-server=llamacpp -- sleep 3600

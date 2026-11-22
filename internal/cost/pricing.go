@@ -8,10 +8,13 @@
 package cost
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path"
+	"strconv"
 
 	"sigs.k8s.io/yaml"
 )
@@ -109,11 +112,64 @@ func LoadPriceFile(p string) (*PriceFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read price file: %w", err)
 	}
-	var f PriceFile
-	if err := yaml.UnmarshalStrict(data, &f); err != nil {
+	f, err := ParsePriceFile(data)
+	if err != nil {
 		return nil, fmt.Errorf("parse price file %s: %w", p, err)
 	}
-	return &f, f.Validate()
+	return f, f.Validate()
+}
+
+// ParsePriceFile parses a price file strictly (unknown keys are errors), but
+// accepts prices written as text: `helm --set pricing.nodes[0].hourly=0.42`
+// passes "0.42" as a string, because Helm only types whole numbers.
+func ParsePriceFile(data []byte) (*PriceFile, error) {
+	j, err := yaml.YAMLToJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	var v any
+	dec := json.NewDecoder(bytes.NewReader(j))
+	dec.UseNumber()
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	if j, err = json.Marshal(numbersFromText(v)); err != nil {
+		return nil, err
+	}
+	var f PriceFile
+	if err := yaml.UnmarshalStrict(j, &f); err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+// priceKeys are the price file fields that hold numbers.
+var priceKeys = map[string]bool{
+	"hourly": true, "cpuCoreHour": true, "memoryGiBHour": true, "gpuHour": true,
+	"purchasePrice": true, "lifetimeYears": true, "powerWatts": true, "electricityPerKWh": true, "pue": true,
+	"inputPer1M": true, "outputPer1M": true,
+}
+
+// numbersFromText turns "0.42" into 0.42 under the numeric keys only, so a
+// node label value like "8" under match stays text.
+func numbersFromText(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, val := range x {
+			if s, ok := val.(string); ok && priceKeys[k] {
+				if _, err := strconv.ParseFloat(s, 64); err == nil {
+					x[k] = json.Number(s)
+					continue
+				}
+			}
+			x[k] = numbersFromText(val)
+		}
+	case []any:
+		for i := range x {
+			x[i] = numbersFromText(x[i])
+		}
+	}
+	return v
 }
 
 // Validate checks the file for mistakes that would give silent wrong prices.
