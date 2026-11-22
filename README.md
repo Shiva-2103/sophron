@@ -43,9 +43,10 @@ unset HOOK APPTOKEN
 # Turn it on; approvers are the Slack member IDs allowed to press Approve/Deny
 helm upgrade sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.2 -n sophron --reuse-values \
   --set slack.existingSecret=sophron-slack --set 'slack.approvers={U0123ABCD}'
+kubectl -n sophron rollout restart deploy/sophron   # Slack secrets are read at start
 ```
 
-Leave out the app token and the approvers, and you get alerts with a link to the dashboard instead of buttons. Remove the Secret and alerts stop; nothing else changes.
+Leave out the app token and the approvers, and you get alerts with a link to the dashboard instead of buttons. To turn Slack off, delete the Secret and restart the same way; nothing else changes.
 
 | Setting | Default | Example |
 |---|---|---|
