@@ -4,7 +4,7 @@ Prudent operations for self-hosted LLMs on Kubernetes.
 
 *Sophron* (σώφρων) is Greek for "prudent". Kubernetes is the helmsman that steers your workloads. Sophron keeps your self-hosted LLMs cheap, healthy and safe to change.
 
-> Status: **v0.1.2**. Tested end to end in the lab: 6 detectors, Slack alerts with Approve/Deny buttons, cost per model and per 1M tokens, savings, fixes with policy + approval + a hash-chained audit log, and a dashboard.
+> Status: **v0.1.3**. Tested end to end in the lab: 6 detectors, Slack alerts with Approve/Deny buttons, cost per model and per 1M tokens, savings, fixes with policy + approval + a hash-chained audit log, and a dashboard.
 
 ![Sophron: a problem, a fix waiting for approval, approve, the receipt](docs/assets/demo.gif)
 
@@ -14,7 +14,7 @@ You need a Kubernetes cluster (EKS, AKS, GKE, kind, anything) with Prometheus (f
 
 ```bash
 # 1. Install. One pod: collector, detectors, cost engine, fixes, dashboard.
-helm install sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.2 \
+helm install sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.3 \
   --namespace sophron --create-namespace \
   --set clusterName=my-cluster --set 'policy.namespaces={llm}'
 
@@ -41,7 +41,7 @@ kubectl -n sophron create secret generic sophron-slack \
 unset HOOK APPTOKEN
 
 # Turn it on; approvers are the Slack member IDs allowed to press Approve/Deny
-helm upgrade sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.2 -n sophron --reuse-values \
+helm upgrade sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.3 -n sophron --reuse-values \
   --set slack.existingSecret=sophron-slack --set 'slack.approvers={U0123ABCD}'
 kubectl -n sophron rollout restart deploy/sophron   # Slack secrets are read at start
 ```
