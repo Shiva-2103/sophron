@@ -36,7 +36,14 @@ import (
 	"github.com/Shiva-2103/sophron/internal/web"
 )
 
+// version is set at build time: -ldflags "-X main.version=v0.1.0".
+var version = "dev"
+
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Println("sophron-collector", version)
+		return
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
@@ -52,6 +59,7 @@ func run() error {
 		return err
 	}
 	log := newLogger(cfg.LogLevel)
+	log.Info("sophron starting", "version", version)
 
 	slack, err := newSlack(cfg, log)
 	if err != nil {
@@ -118,7 +126,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	apiSrv.Auth, apiSrv.ClusterName, apiSrv.UI = authn, cfg.ClusterName, web.FS()
+	apiSrv.Auth, apiSrv.ClusterName, apiSrv.UI, apiSrv.Version = authn, cfg.ClusterName, web.FS(), version
 	apiSrv.AuditReader, apiSrv.AuditWriter = db, db
 	if cfg.InsecureHTTP {
 		log.Warn("sign-in cookies work over plain http (--insecure-http-cookies): lab use only")

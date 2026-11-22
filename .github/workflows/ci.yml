@@ -89,3 +89,55 @@ jobs:
           helm lint charts/sophron --set policy.namespaces='{llm,chat}' --set clusterName=prod
           helm template t charts/sophron --set policy.namespaces='{llm}' > rendered.yaml
           ./kubeconform -summary -strict rendered.yaml
+
+  install:
+    name: install on a fresh cluster
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ghcr.io/shiva-2103/sophron-collector:ci
+          build-args: VERSION=ci-${{ github.sha }}
+          cache-from: type=gha
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: fresh
+      - uses: azure/setup-helm@v4
+      - name: helm install (what a new user runs, with the local image)
+        run: |
+          kind load docker-image ghcr.io/shiva-2103/sophron-collector:ci --name fresh
+          kubectl create namespace llm
+          helm install sophron charts/sophron --namespace sophron --create-namespace \
+            --set image.tag=ci --set image.pullPolicy=Never \
+            --set clusterName=ci --set 'policy.namespaces={llm}' --wait --timeout 4m
+      - name: A labelled model pod is discovered (no Prometheus needed)
+        run: |
+          kubectl -n llm run fake-model --image=busybox:1.37 --labels=sophron.dev/model-server=llamacpp -- sleep 3600
+          kubectl -n sophron port-forward svc/sophron 8081:8080 >/dev/null 2>&1 &
+          sleep 3
+          pw=$(kubectl -n sophron get secret sophron-admin -o jsonpath='{.data.password}' | base64 -d)
+          api() { curl -fsS -u "admin:$pw" -H "X-Sophron: 1" "http://localhost:8081/api/v1/$1"; }
+          for i in $(seq 1 30); do
+            api snapshots/latest | jq -e 'map(select(.pod == "fake-model")) | length == 1' >/dev/null && break
+            sleep 5
+          done
+          api snapshots/latest | jq -e 'map(select(.pod == "fake-model")) | length == 1'
+          api me | jq -e '.authEnabled and .canApprove and (.version | startswith("ci-"))'
+          api setup | jq -r '.[] | "\(.status)\t\(.name)\t\(.detail)"'
+          api setup | jq -e 'map(select(.name == "Fixes in llm")) | .[0].status == "ok"'
+          curl -fsS http://localhost:8081/ | grep -q "<title>Sophron</title>"
+          echo "fresh install: discovered the model pod, sign-in works, fixes allowed in llm, dashboard served"
+      - name: helm test
+        run: helm test sophron --namespace sophron --logs
+      - name: Logs on failure
+        if: failure()
+        run: |
+          kubectl -n sophron get pods -o wide
+          kubectl -n sophron describe pods
+          kubectl -n sophron logs deploy/sophron --tail=200

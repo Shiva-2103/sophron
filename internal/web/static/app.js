@@ -141,15 +141,17 @@
   // perHour turns trend buckets into USD per hour, so the first and the
   // current bucket (only partly covered) don't look like a drop in spend.
   function perHour(trend, key = "modelCost") {
-    if (trend.length < 2) return trend.map((p) => p[key]);
+    if (trend.length < 2) return trend.map((p) => (empty(p) ? null : p[key]));
     const bucket = (new Date(trend[1].time) - new Date(trend[0].time)) / 1000;
     const winStart = Date.now() - RANGE_HOURS[trendRange()] * 3600e3;
     return trend.map((p) => {
       const start = Math.max(new Date(p.time).getTime(), winStart), end = Math.min(new Date(p.time).getTime() + bucket * 1000, Date.now());
       const hours = (end - start) / 3600e3;
+      if (empty(p)) return null; // no data that hour (collector down): a gap, not $0
       return hours > bucket / 3600 / 20 ? p[key] / hours : null; // skip slivers
     });
   }
+  const empty = (p) => !p.modelCost && !p.outputTokens;
   const trendRange = () => (state.range === "1h" ? "24h" : state.range);
   const trendWindow = () => RANGES[trendRange()];
 
@@ -213,7 +215,7 @@
       <div class="cluster" title="Cluster"><span class="dot" id="clusterdot" style="color:var(--good)"></span>${esc(me.cluster || "cluster")}</div>
       <nav aria-label="Main">${links("nav")}</nav>
       <div class="sidecard"><div style="display:flex;gap:8px;align-items:center;font-weight:600">${icon("lock", 15, "var(--sage)")}${me.authEnabled ? "Approval mode" : "Read-only mode"}</div>
-        <div class="ter" style="margin-top:4px">${me.authEnabled ? "Fixes run only after an admin approves, within the policy." : "No admin password set: nothing can be approved. Run make admin-password."}</div></div>
+        <div class="ter" style="margin-top:4px">${me.authEnabled ? "Fixes run only after an admin approves, within the policy." : "No admin password set: nothing can be approved. Run make admin-password."}</div>${me.version ? `<div class="ter" style="margin-top:8px;font-size:11.5px">Sophron ${esc(me.version)}</div>` : ""}</div>
       <div class="me"><div class="avatar">${esc((user.name || "?")[0])}</div><div style="flex:1;min-width:0"><b>${esc(user.name)}</b><div class="ter" style="font-size:12px">${esc(user.role)}</div></div>
         ${me.loggedIn ? `<button class="iconbtn" style="width:32px;height:32px" id="logout" title="Sign out" aria-label="Sign out">${icon("out", 16)}</button>` : me.authEnabled ? `<a href="#/login">Sign in</a>` : ""}</div>
     </aside><div class="main"><div class="top">${title}${seg}
