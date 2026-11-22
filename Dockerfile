@@ -12,8 +12,10 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 ARG VERSION=dev
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+# Set by buildx for each target platform. No defaults here: a default
+# overrides buildx's value, and every platform would get an amd64 binary.
+ARG TARGETOS
+ARG TARGETARCH
 # CGO_ENABLED=0: no C libraries needed, so the binary runs on a minimal image.
 # -trimpath and -s -w: reproducible, smaller binary.
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
