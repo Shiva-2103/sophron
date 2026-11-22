@@ -55,6 +55,8 @@ type Server struct {
 	// Dashboard, login and approvals (all optional).
 	Auth        *auth.Auth
 	ClusterName string
+	// Version of this build, shown in the dashboard.
+	Version     string
 	FixReader   FixReader
 	FixDecider  FixDecider
 	AuditReader AuditReader

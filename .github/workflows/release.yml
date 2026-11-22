@@ -1,0 +1,114 @@
+# Release: push a tag like v0.1.0 and this publishes
+#   - the image  ghcr.io/shiva-2103/sophron-collector:<version>  (amd64 + arm64)
+#   - the chart  oci://ghcr.io/shiva-2103/charts/sophron          (same version)
+#   - a GitHub release with notes and the packaged chart
+# The image is scanned with Trivy before anything is pushed.
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write   # create the GitHub release
+  packages: write   # push to ghcr.io
+
+env:
+  IMAGE: ghcr.io/shiva-2103/sophron-collector
+  CHARTS: oci://ghcr.io/shiva-2103/charts
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from the tag
+        id: v
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          if [[ "$tag" == *-* ]]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build for scanning (amd64, not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: sophron-collector:scan
+          build-args: VERSION=${{ steps.v.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan for vulnerabilities (fail on fixable high or critical)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: sophron-collector:scan
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=sophron-collector
+            org.opencontainers.image.description=Prudent operations for self-hosted LLMs on Kubernetes
+
+      - name: Build and push (amd64 + arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ steps.v.outputs.tag }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+
+      - uses: azure/setup-helm@v4
+
+      - name: Package and push the chart
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          sed -i "s/^version: .*/version: $v/; s/^appVersion: .*/appVersion: \"$v\"/" charts/sophron/Chart.yaml
+          helm lint charts/sophron
+          helm package charts/sophron -d dist
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push "dist/sophron-$v.tgz" "$CHARTS"
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          cat > notes.md <<EOF
+          ## Install
+
+          \`\`\`bash
+          helm install sophron $CHARTS/sophron --version $v \\
+            --namespace sophron --create-namespace \\
+            --set clusterName=my-cluster --set 'policy.namespaces={llm}'
+          \`\`\`
+
+          Image: \`$IMAGE:$v\` (linux/amd64, linux/arm64)
+          EOF
+          flags=(--title "Sophron ${{ steps.v.outputs.tag }}" --notes-file notes.md --generate-notes)
+          [[ "${{ steps.v.outputs.prerelease }}" == "true" ]] && flags+=(--prerelease)
+          gh release create "${{ steps.v.outputs.tag }}" "dist/sophron-$v.tgz" "${flags[@]}"

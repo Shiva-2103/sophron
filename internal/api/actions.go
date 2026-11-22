@@ -63,7 +63,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me", func(w http.ResponseWriter, r *http.Request) {
 		u, ok := auth.FromContext(r.Context())
 		writeJSON(w, http.StatusOK, map[string]any{"authEnabled": s.Auth.Enabled(), "loggedIn": ok, "user": u,
-			"cluster": s.ClusterName, "canApprove": ok && u.CanApprove()})
+			"cluster": s.ClusterName, "canApprove": ok && u.CanApprove(), "version": s.Version})
 	})
 	mux.HandleFunc("GET /api/v1/fixes", func(w http.ResponseWriter, r *http.Request) {
 		if s.FixReader == nil {

@@ -168,7 +168,7 @@ func main() {
 	srv := &api.Server{Store: db, Interval: 30 * time.Second, Synced: func() bool { return true },
 		Status:   func() collector.Status { return collector.Status{LastRun: time.Now(), Pods: 4} },
 		Findings: db, Rules: func() rules.Status { return rules.Status{} }, Detectors: rules.All(),
-		Cost: &cost.Reporter{Store: db, Pricer: pricer, File: file}, Auth: authn, ClusterName: "demo-cluster",
+		Cost: &cost.Reporter{Store: db, Pricer: pricer, File: file}, Auth: authn, ClusterName: "demo-cluster", Version: "demo",
 		FixReader: db, FixDecider: manager, AuditReader: db, AuditWriter: db, UI: web.FS(),
 		Setup: func(context.Context) []api.Check {
 			return []api.Check{{Name: "Prometheus", Status: "ok", Detail: "sample data"}, {Name: "Token metrics", Status: "ok", Detail: "4 of 4 pods report tokens"},
