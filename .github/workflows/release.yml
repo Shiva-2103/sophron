@@ -111,4 +111,12 @@ jobs:
           EOF
           flags=(--title "Sophron ${{ steps.v.outputs.tag }}" --notes-file notes.md --generate-notes)
           [[ "${{ steps.v.outputs.prerelease }}" == "true" ]] && flags+=(--prerelease)
-          gh release create "${{ steps.v.outputs.tag }}" "dist/sophron-$v.tgz" "${flags[@]}"
+          tag="${{ steps.v.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # Made by hand in the GitHub web page: keep it, add the chart and install notes.
+            gh release upload "$tag" "dist/sophron-$v.tgz" --clobber
+            { cat notes.md; echo; gh release view "$tag" --json body --jq .body; } > merged.md
+            gh release edit "$tag" --notes-file merged.md
+          else
+            gh release create "$tag" "dist/sophron-$v.tgz" "${flags[@]}"
+          fi
