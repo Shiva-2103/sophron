@@ -4,7 +4,7 @@ Prudent operations for self-hosted LLMs on Kubernetes.
 
 *Sophron* (σώφρων) is Greek for "prudent". Kubernetes is the helmsman that steers your workloads. Sophron keeps your self-hosted LLMs cheap, healthy and safe to change.
 
-> Status: building. Phase 1 (lab cluster) and Phase 2 (collector) work. Next: Phase 3, the rules engine.
+> Status: building. Works in the lab: detection (6 detectors), Slack alerts, cost per model and per 1M tokens, savings, fixes with policy + approval + audit log, and a dashboard. Next: lab end-to-end test, first release.
 
 ![How Sophron works](docs/assets/overview.png)
 

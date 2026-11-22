@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sophron.fullname" . }}-config
+  labels: {{- include "sophron.labels" . | nindent 4 }}
+data:
+  prices.yaml: |
+    {{- $p := dict "nodes" .Values.pricing.nodes "referenceAPIs" .Values.pricing.referenceAPIs }}
+    {{- toYaml $p | nindent 4 }}
+  policy.yaml: |
+    {{- toYaml .Values.policy | nindent 4 }}
+{{- if and (not .Values.auth.existingSecret) .Values.auth.generate }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "sophron.authSecret" . }}
+  labels: {{- include "sophron.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  {{- $old := lookup "v1" "Secret" .Release.Namespace (include "sophron.authSecret" .) }}
+  {{- if $old }}
+  password: {{ index $old.data "password" }}
+  viewer-password: {{ index $old.data "viewer-password" }}
+  {{- else }}
+  password: {{ randAlphaNum 24 | b64enc }}
+  viewer-password: {{ randAlphaNum 24 | b64enc }}
+  {{- end }}
+{{- end }}

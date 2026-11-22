@@ -142,14 +142,14 @@ h2{font-size:26px;font-weight:600;letter-spacing:-.2px}
   <p class="sub">A whole Kubernetes cluster inside one EC2 machine, for testing Sophron.</p>
   <div class="row" style="align-items:center">
     <div class="box human" style="width:190px;flex:none"><div class="t">Your laptop</div><div class="d">Browser and terminal</div></div>
-    <div class="arrow" style="width:120px;flex-direction:column;gap:4px"><div class="d" style="margin:0;font-size:13px">SSH tunnel</div><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="arrow" style="width:120px;flex-direction:column;gap:4px"><div class="d" style="margin:0;font-size:13px;text-align:center">SSH, and<br>Grafana on :3000</div><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#55657d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="box exist" style="flex:1;padding:20px">
       <div class="t" style="margin-bottom:4px">EC2 t3.2xlarge, Ubuntu</div>
       <div class="d" style="margin-bottom:14px">Docker runs each Kubernetes node as a container (kind)</div>
       <div style="display:flex;flex-direction:column;gap:12px">
         <div class="box"><div class="t">Control plane node</div><div class="d">The Kubernetes brain: API, scheduler</div></div>
         <div class="box sophron"><div class="t">Worker: llm</div><div class="d">Model server (llama.cpp, Qwen2.5 1.5B) with /metrics</div></div>
-        <div class="box"><div class="t">Worker: system</div><div class="d">Prometheus, Grafana, load generator</div></div>
+        <div class="box"><div class="t">Worker: system</div><div class="d">Prometheus, Grafana (published on :3000), load generator</div></div>
       </div>
     </div>
   </div>
@@ -185,6 +185,120 @@ h2{font-size:26px;font-weight:600;letter-spacing:-.2px}
   </div>
   <div class="row" style="margin-top:22px;gap:12px">
     <div class="box" style="flex:1"><div class="t">Example snapshot</div><div class="d" style="font-family:monospace;font-size:13px;line-height:1.6">llm/llm-server-65795b757c-x2bws &nbsp;·&nbsp; llamacpp &nbsp;·&nbsp; Running, ready<br>node sophron-lab-worker (kind, 8 cores)<br>48.1 tokens/s &nbsp;·&nbsp; 5.85 CPU cores &nbsp;·&nbsp; 4% throttled &nbsp;·&nbsp; started in 60 s</div></div>
+  </div>
+</figure>
+
+<!-- 7. Rules -->
+<figure id="rules">
+  <h2>How a problem becomes a finding</h2>
+  <p class="sub">After every collection cycle, six detectors read the recent history of each model pod.</p>
+  <div class="row">
+    <div class="box exist" style="width:170px;flex:none"><div class="t">Snapshots</div><div class="d">Last 35 minutes, every 30 s</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1">
+      <div class="t" style="margin-bottom:10px">Detectors</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">pending-unschedulable</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">rollout-stuck</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">oom-killed</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">container-failing</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">slow-cold-start</div></div>
+        <div class="box" style="padding:9px 12px"><div class="d" style="margin:0;color:var(--ink)">queue-backlog</div></div>
+      </div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="width:200px;flex:none"><div class="t">Finding</div><div class="d">Title, plain-English summary, evidence, suggested fix</div></div>
+  </div>
+  <div class="row" style="margin-top:26px;gap:12px">
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">New problem</div><div class="d">Opened, logged</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">Still there</div><div class="d">Updated each cycle</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--amber-ink)">Gets worse</div><div class="d">Escalated</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">Gone 90 s</div><div class="d">Resolved, no flapping</div></div>
+  </div>
+  <div class="legend">
+    <span>Read them: make findings &nbsp;·&nbsp; API: /api/v1/findings &nbsp;·&nbsp; Slack alerts</span>
+  </div>
+</figure>
+
+<!-- 9. Cost engine -->
+<figure id="cost">
+  <h2>How a node's price becomes a cost per token</h2>
+  <p class="sub">Every dollar of every node lands in one place: a model, another pod, or idle.</p>
+  <div class="row">
+    <div class="box exist" style="width:200px;flex:none"><div class="t">Node price</div><div class="d">Node label, your price file, OpenCost, or default prices (marked estimate)</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="width:200px;flex:none"><div class="t">Split per resource</div><div class="d">$ per CPU core, per GiB, per GPU, in OpenCost's proportions</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="flex:1"><div class="t">Charge each pod</div><div class="d">The larger of reserved and used, per resource. GPUs whole</div></div>
+    <div class="arrow"><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l7 6-7 6" stroke="#0e7c7b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="box sophron" style="width:190px;flex:none"><div class="t">Per model</div><div class="d">$ per hour, per month, per 1M tokens</div></div>
+  </div>
+  <div class="row" style="margin-top:26px;gap:12px">
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">Model pods</div><div class="d">What your LLMs cost</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--teal-ink)">Other pods</div><div class="d">Their reservations</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--amber-ink)">Idle</div><div class="d">Paid for, used by nobody</div></div>
+    <div class="box" style="flex:1"><div class="t" style="color:var(--amber-ink)">Down cost</div><div class="d">Paid while a model served nothing</div></div>
+  </div>
+  <div class="legend">
+    <span>Read it: make cost &nbsp;·&nbsp; make cost-models &nbsp;·&nbsp; make cost-nodes &nbsp;·&nbsp; API: /api/v1/cost/*</span>
+  </div>
+</figure>
+
+<!-- 8. Slack alert (a faithful mock of the real message) -->
+<style>
+.sl{background:#fff;border:1.5px solid #dde4ec;border-radius:14px;padding:18px 20px;display:flex;gap:14px;margin-bottom:16px}
+.sl .av{width:40px;height:40px;border-radius:9px;background:var(--teal);color:#fff;font-weight:600;font-size:20px;display:flex;align-items:center;justify-content:center;flex:none}
+.sl .who{font-size:15px;font-weight:600}.sl .who span{font-weight:400;color:var(--muted);font-size:13px;margin-left:6px}
+.sl .app{display:inline-block;background:#e8ecf1;color:#55657d;font-size:11px;font-weight:600;border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:2px}
+.sl .hd{font-size:18px;font-weight:700;margin:6px 0 10px}
+.sl .card{border-left:4px solid;border-radius:4px;padding:2px 0 2px 14px}
+.sl .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 30px;font-size:14px;margin-bottom:12px}
+.sl b{font-weight:600}
+.sl .p{font-size:14px;line-height:1.55;margin-bottom:10px}
+.sl code{font-family:Menlo,Consolas,monospace;font-size:12.5px;background:#f4f5f7;border:1px solid #e3e6ea;border-radius:4px;padding:0 4px;color:#c0185a}
+.sl pre{font-family:Menlo,Consolas,monospace;font-size:12.5px;background:#f8f8f8;border:1px solid #e3e6ea;border-radius:6px;padding:10px 12px;margin-bottom:12px;white-space:pre-wrap}
+.sl .ft{font-size:12.5px;color:var(--muted);border-top:1px solid #e3e6ea;padding-top:8px}
+.sl .ft code{color:var(--muted)}
+</style>
+<figure id="slack">
+  <h2>A Sophron alert in Slack</h2>
+  <div class="sub">Header says what and how bad. The card says why, the proof, and what to do. Resolved messages say what changed and with which tool.</div>
+  <div class="sl">
+    <div class="av">S</div>
+    <div style="flex:1">
+      <div class="who">Sophron<span class="app">APP</span><span>1:21 PM</span></div>
+      <div class="hd">🔴 CRITICAL · llm/llm-server is being killed for using too much memory</div>
+      <div class="card" style="border-color:#E01E5A">
+        <div class="grid">
+          <div><b>Status</b><br>Open</div><div><b>Severity</b><br>Critical</div>
+          <div><b>Cluster</b><br>sophron-lab</div><div><b>Workload</b><br><code>deployment/llm-server</code><br>namespace <code>llm</code></div>
+          <div><b>Pod</b><br><code>llm-server-7d9f8b6c5-x2k4p</code></div><div><b>Detected</b><br>15 Nov 2026, 01:21 PM IST (07:51 UTC)</div>
+        </div>
+        <div class="p"><b>What's wrong</b><br>The model server container used more than its 512Mi memory limit and the kernel killed it (OOMKilled). It restarted 2 times in the last 15 minutes and is not serving requests.</div>
+        <div class="p"><b>Evidence</b><br>• last exit: OOMKilled (exit code 137), 40s ago<br>• memory limit 512Mi, peak use 498 MiB<br>• 2 restarts in 15m, pod not Ready</div>
+        <div class="p"><b>Suggested fix</b><br>Give the container more memory, or make the model need less.<br>1. Raise the memory limit to 768Mi (max of limit × 1.5 and peak × 1.3)<br>2. Or lower <code>--ctx-size</code> / <code>--parallel</code>: the KV cache needs memory for every slot</div>
+        <pre>kubectl -n llm set resources deployment/llm-server -c llama-server --limits=memory=768Mi</pre>
+        <div class="ft">Automated message from <b>Sophron</b> · detector <code>oom-killed</code> · finding #12 · read-only: nothing was changed</div>
+      </div>
+    </div>
+  </div>
+  <div class="sl" style="margin-bottom:0">
+    <div class="av">S</div>
+    <div style="flex:1">
+      <div class="who">Sophron<span class="app">APP</span><span>1:28 PM</span></div>
+      <div class="hd">✅ RESOLVED · llm/llm-server is being killed for using too much memory</div>
+      <div class="card" style="border-color:#2EB67D">
+        <div class="grid">
+          <div><b>Status</b><br>Resolved</div><div><b>Was</b><br>Critical</div><div><b>Cluster</b><br>sophron-lab</div>
+          <div><b>Workload</b><br><code>deployment/llm-server</code></div><div><b>Open for</b><br>6m 30s</div><div><b>Resolved</b><br>15 Nov 2026, 01:28 PM IST (07:58 UTC)</div>
+        </div>
+        <div class="p"><b>How it was resolved</b><br>Fixed by a change to the workload.<br>• new version rolled out (revision 6c9d4f7b8 → 7b895f855b)<br>• memory limit 512Mi → 6Gi<br>• 1 of 1 pods Ready now</div>
+        <div class="grid">
+          <div><b>Changed with</b><br><code>kubectl apply</code><br>15 Nov 2026, 01:25 PM IST (07:55 UTC)</div><div><b>Approved by</b><br>Not needed: Sophron changed nothing</div>
+        </div>
+        <div class="ft">Automated message from <b>Sophron</b> · detector <code>oom-killed</code> · finding #12 · read-only: nothing was changed</div>
+      </div>
+    </div>
   </div>
 </figure>
 

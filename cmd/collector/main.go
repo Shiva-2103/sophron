@@ -15,18 +15,25 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // time zones for alerts; the distroless image may not have them
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/Shiva-2103/sophron/internal/api"
+	"github.com/Shiva-2103/sophron/internal/auth"
 	"github.com/Shiva-2103/sophron/internal/collector"
 	"github.com/Shiva-2103/sophron/internal/config"
+	"github.com/Shiva-2103/sophron/internal/cost"
+	"github.com/Shiva-2103/sophron/internal/fixes"
 	"github.com/Shiva-2103/sophron/internal/kube"
 	"github.com/Shiva-2103/sophron/internal/mapping"
+	"github.com/Shiva-2103/sophron/internal/notify"
 	"github.com/Shiva-2103/sophron/internal/prom"
+	"github.com/Shiva-2103/sophron/internal/rules"
 	"github.com/Shiva-2103/sophron/internal/store"
+	"github.com/Shiva-2103/sophron/internal/web"
 )
 
 func main() {
@@ -45,6 +52,14 @@ func run() error {
 		return err
 	}
 	log := newLogger(cfg.LogLevel)
+
+	slack, err := newSlack(cfg, log)
+	if err != nil {
+		return err
+	}
+	if cfg.SendTestAlert {
+		return sendTestAlert(slack)
+	}
 
 	// Stop cleanly on Ctrl+C or when Kubernetes stops the pod (SIGTERM).
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -72,6 +87,11 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	if slack != nil {
+		if err := slack.UseState(ctx, db); err != nil {
+			log.Warn("could not load slack cooldown state", "error", err)
+		}
+	}
 
 	inf := kube.NewInformers(clientset, 10*time.Minute)
 	inf.Start(ctx)
@@ -81,9 +101,90 @@ func run() error {
 	}
 
 	c := &collector.Collector{Prom: promClient, Kube: inf, Mapping: m, Store: db, Log: log}
+	apiSrv := &api.Server{Store: db, Status: c.Status, Synced: inf.HasSynced, Interval: cfg.Interval}
+
+	if cfg.Cost {
+		prices, err := cost.LoadPriceFile(cfg.PricingFile)
+		if err != nil {
+			return err
+		}
+		pricer := &cost.Pricer{Nodes: inf, Prom: promClient, File: prices, Log: log}
+		c.Pricer = pricer
+		apiSrv.Cost = &cost.Reporter{Store: db, Pricer: pricer, File: prices}
+		log.Info("cost engine on", "priceRules", len(prices.Nodes), "referenceAPIs", len(prices.ReferenceAPIs))
+	}
+
+	authn, err := auth.New(auth.Config{AdminPasswordFile: cfg.AdminPasswordFile, ViewerPasswordFile: cfg.ViewerPasswordFile, InsecureHTTP: cfg.InsecureHTTP})
+	if err != nil {
+		return err
+	}
+	apiSrv.Auth, apiSrv.ClusterName, apiSrv.UI = authn, cfg.ClusterName, web.FS()
+	apiSrv.AuditReader, apiSrv.AuditWriter = db, db
+	if cfg.InsecureHTTP {
+		log.Warn("sign-in cookies work over plain http (--insecure-http-cookies): lab use only")
+	}
+	if !authn.Enabled() {
+		log.Warn("no admin password set: the dashboard is read-only and fixes can't be approved")
+	}
+
+	var manager *fixes.Manager
+	var policy fixes.Policy
+	if cfg.Fixes {
+		policy, err = fixes.LoadPolicy(cfg.PolicyFile)
+		if err != nil {
+			return err
+		}
+		manager = &fixes.Manager{Store: db, Policy: policy, Log: log,
+			Applier: fixes.KubeApplier{Client: clientset, MaxReplicas: policy.MaxReplicas}}
+		apiSrv.FixReader, apiSrv.FixDecider = db, manager
+		log.Info("fixes on", "default", policy.Default, "namespaces", policy.Namespaces)
+	}
+	apiSrv.Setup = doctor(cfg, promClient, c, db, clientset, authn, slack, policy)
+
+	if cfg.Rules {
+		rc := rules.DefaultConfig()
+		rc.PendingAfter, rc.RolloutStuckAfter, rc.SlowStartAfter = cfg.PendingAfter, cfg.RolloutStuckAfter, cfg.SlowStartAfter
+		notifiers := []rules.Notifier{rules.LogNotifier{Log: log}}
+		if manager != nil {
+			// First, so the fix request exists before the alerts go out.
+			notifiers = append([]rules.Notifier{manager}, notifiers...)
+		}
+		if slack != nil {
+			go slack.Start(ctx)
+			if manager != nil && cfg.SlackAppToken != "" && len(cfg.SlackApprovers) > 0 {
+				slack.UseFixes(db)
+				go slack.RunApprovals(ctx, cfg.SlackAppToken, manager)
+				log.Info("slack approve/deny buttons on", "approvers", len(cfg.SlackApprovers))
+			}
+			notifiers = append(notifiers, slack)
+			log.Info("slack alerts on", "cluster", cfg.ClusterName, "minSeverity", cfg.SlackMinSeverity)
+		} else {
+			log.Info("slack alerts off (no webhook URL)")
+		}
+		engine := &rules.Engine{
+			Store: db, Detectors: rules.All(), Config: rc, Log: log,
+			Notifiers:    notifiers,
+			Changes:      kube.Changes{Client: clientset},
+			ResolveAfter: cfg.ResolveAfter,
+		}
+		if manager != nil {
+			engine.Approvals = manager
+		}
+		c.AfterCycle = func(ctx context.Context, snaps []collector.Snapshot) {
+			st, err := engine.Process(ctx, snaps)
+			if err != nil {
+				log.Error("rules engine failed", "error", err)
+				return
+			}
+			log.Info("rules engine done", "open", st.Open, "opened", st.Opened, "resolved", st.Resolved)
+		}
+		apiSrv.Findings, apiSrv.Rules, apiSrv.Detectors = db, engine.Status, engine.Detectors
+		log.Info("rules engine on", "detectors", len(engine.Detectors))
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           (&api.Server{Store: db, Status: c.Status, Synced: inf.HasSynced, Interval: cfg.Interval}).Handler(),
+		Handler:           apiSrv.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
@@ -103,6 +204,43 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// newSlack returns the Slack notifier, or nil when no webhook is set.
+func newSlack(cfg *config.Config, log *slog.Logger) (*notify.Slack, error) {
+	if cfg.SlackWebhookURL == "" {
+		return nil, nil
+	}
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		return nil, err
+	}
+	return notify.NewSlack(notify.SlackConfig{
+		WebhookURL:  cfg.SlackWebhookURL,
+		Cluster:     cfg.ClusterName,
+		MinSeverity: rules.Severity(strings.ToLower(cfg.SlackMinSeverity)),
+		Location:    loc,
+		Cooldown:    cfg.SlackCooldown,
+		Dashboard:   cfg.DashboardURL,
+		Interactive: cfg.SlackAppToken != "" && len(cfg.SlackApprovers) > 0,
+		Approvers:   cfg.SlackApprovers,
+	}, log)
+}
+
+// sendTestAlert posts a sample finding, so you can check the webhook and
+// see what an alert looks like.
+func sendTestAlert(slack *notify.Slack) error {
+	if slack == nil {
+		return errors.New("no Slack webhook URL: set SOPHRON_SLACK_WEBHOOK_URL (make slack-secret)")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	f := notify.SampleFinding(time.Now().UTC())
+	if err := slack.Send(ctx, rules.Event{Type: notify.EventTest, Finding: f}); err != nil {
+		return err
+	}
+	fmt.Println("test alert sent: check your Slack channel")
+	return nil
 }
 
 // kubeConfig uses the pod's service account inside a cluster, or a
@@ -128,6 +266,14 @@ func prune(ctx context.Context, db *store.Store, retention time.Duration, log *s
 			log.Warn("prune failed", "error", err)
 		} else if n > 0 {
 			log.Info("pruned old snapshots", "deleted", n)
+		}
+		if err := db.PruneAlertMarks(ctx, 24*time.Hour); err != nil {
+			log.Warn("prune alert marks failed", "error", err)
+		}
+		if n, err := db.PruneFindings(ctx, retention); err != nil {
+			log.Warn("prune findings failed", "error", err)
+		} else if n > 0 {
+			log.Info("pruned old findings", "deleted", n)
 		}
 		select {
 		case <-ctx.Done():

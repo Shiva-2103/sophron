@@ -1,0 +1,14 @@
+Sophron is starting in {{ .Release.Namespace }}.
+
+1. Open the dashboard:
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "sophron.fullname" . }} 8081:{{ .Values.service.port }}
+   then http://localhost:8081
+
+2. Sign in as admin:
+   kubectl -n {{ .Release.Namespace }} get secret {{ include "sophron.authSecret" . }} -o jsonpath='{.data.password}' | base64 -d; echo
+
+3. Check the setup (data sources, prices, Slack, fix permissions): the Setup page.
+{{- if not .Values.policy.namespaces }}
+
+Fixes are blocked everywhere until you list namespaces under policy.namespaces.
+{{- end }}

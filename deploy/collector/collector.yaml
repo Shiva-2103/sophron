@@ -21,6 +21,11 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "nodes", "events"]
     verbs: ["get", "list", "watch"]
+  # Read workloads to tell which tool changed them (managedFields) when a
+  # problem resolves. Still read-only.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -30,6 +35,82 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: sophron-collector
+subjects:
+  - kind: ServiceAccount
+    name: sophron-collector
+    namespace: sophron-system
+---
+# Prices for the cost engine. Without this file Sophron uses OpenCost's
+# node prices if OpenCost is installed, otherwise default unit prices
+# (marked as an estimate). A node label or annotation
+# sophron.dev/hourly-price: "0.42" beats everything.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sophron-pricing
+  namespace: sophron-system
+data:
+  prices.yaml: |
+    nodes:
+      # The lab: three kind nodes are containers on one EC2 t3.2xlarge
+      # ($0.3328/hour on demand, us-east-1), so each gets a third.
+      - name: "sophron-lab-*"
+        hourly: 0.1109
+        note: EC2 t3.2xlarge ($0.3328/h) shared by 3 kind nodes
+      # Owned hardware example:
+      # - match: { node.kubernetes.io/instance-type: rtx-4090-box }
+      #   owned: { purchasePrice: 3200, lifetimeYears: 3, powerWatts: 450, electricityPerKWh: 0.12, pue: 1.2 }
+    # Hosted APIs to compare against. Prices change: put in the current
+    # list prices of the APIs you would otherwise use.
+    referenceAPIs:
+      - name: Example API (edit these prices)
+        inputPer1M: 0.50
+        outputPer1M: 1.50
+---
+# What fixes Sophron may apply, and where. A fix the policy allows still
+# waits for an admin's approval unless its mode is "auto".
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sophron-policy
+  namespace: sophron-system
+data:
+  policy.yaml: |
+    default: approve        # auto | approve | never
+    namespaces: [llm]       # the only namespace Sophron may change
+    maxReplicas: 2          # scale-up never goes above this
+    actions:
+      rollout-restart: approve
+      rollout-undo: approve
+      set-memory-limit: approve
+      scale-up: approve
+---
+# The fixer's permissions: only in the llm namespace, only workloads.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sophron-fixer
+  namespace: llm
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sophron-fixer
+  namespace: llm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sophron-fixer
 subjects:
   - kind: ServiceAccount
     name: sophron-collector
@@ -81,6 +162,23 @@ spec:
             - --prometheus-url=http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
             - --interval=30s
             - --db=/data/sophron.db
+          env:
+            - name: SOPHRON_CLUSTER_NAME
+              value: sophron-lab
+            - name: SOPHRON_TIMEZONE
+              value: Asia/Kolkata
+            # Slack alerts. The webhook URL is a secret: it comes from the
+            # sophron-slack Secret (make slack-secret), mounted as a file
+            # rather than an env var, so it doesn't show in the process
+            # environment. No Secret: Slack is off.
+            - name: SOPHRON_POLICY_FILE
+              value: /etc/sophron/policy/policy.yaml
+            - name: SOPHRON_DASHBOARD_URL
+              value: http://localhost:8081
+            - name: SOPHRON_PRICING_FILE
+              value: /etc/sophron/pricing/prices.yaml
+            - name: SOPHRON_SLACK_WEBHOOK_FILE
+              value: /etc/sophron/slack/webhook-url
           ports:
             - name: http
               containerPort: 8080
@@ -101,10 +199,39 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: slack
+              mountPath: /etc/sophron/slack
+              readOnly: true
+            - name: pricing
+              mountPath: /etc/sophron/pricing
+              readOnly: true
+            - name: policy
+              mountPath: /etc/sophron/policy
+              readOnly: true
+            - name: admin
+              mountPath: /etc/sophron/admin
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: sophron-data
+        - name: pricing
+          configMap:
+            name: sophron-pricing
+        - name: policy
+          configMap:
+            name: sophron-policy
+        # Dashboard passwords (make admin-password). Missing: read-only.
+        - name: admin
+          secret:
+            secretName: sophron-admin
+            optional: true
+            defaultMode: 0440
+        - name: slack
+          secret:
+            secretName: sophron-slack
+            optional: true
+            defaultMode: 0440  # readable by the pod group (fsGroup 65532)
 ---
 apiVersion: v1
 kind: Service

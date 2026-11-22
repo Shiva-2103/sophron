@@ -65,6 +65,20 @@ Bigger context or more parallel requests need more memory. That's the exact trad
 
 A small resource that tells the Prometheus Operator what to scrape. No Prometheus config files to edit. Same pattern as in most production clusters.
 
+### Publishing Grafana on port 3000 (added later)
+
+Before, Grafana needed a `kubectl port-forward` that died on logout or pod restart. Now it's always on.
+
+| Layer | Setting | Job |
+|---|---|---|
+| Kubernetes Service | `type: NodePort`, `nodePort: 30000` | Every node accepts traffic on 30000 and sends it to Grafana |
+| kind | `extraPortMappings` 3000 → 30000 on the control plane | Docker publishes the instance's port 3000 into the node container |
+| AWS | Security group rule, your IP `/32` only | Lets only your laptop reach port 3000 |
+
+Port mappings are fixed when a kind cluster is created, so an older cluster needs `make lab-down && make lab-up`.
+
+In a real cluster you'd use an Ingress or a LoadBalancer with HTTPS and login, not a NodePort on a public IP.
+
 ### Why we disabled some scrapes
 
 In kind, etcd, scheduler and controller-manager listen only inside the control-plane container. Prometheus can't reach them and would show false "down" alerts. We turned those scrapes off.
@@ -116,5 +130,6 @@ Run `curl localhost:8080/metrics` (after `make lab-ports`) to see the full list.
 - How does Prometheus find what to scrape in Kubernetes?
 - Why does a longer context window need more memory?
 - How would you expose a cluster UI safely? (SSH tunnel, or a port opened only to your IP)
+- ClusterIP vs NodePort vs LoadBalancer: when do you use each?
 - Rolling update vs Recreate: when does each fit?
 - A new pod is stuck Pending. How do you debug it?

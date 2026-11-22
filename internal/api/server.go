@@ -5,11 +5,30 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/Shiva-2103/sophron/internal/auth"
 	"github.com/Shiva-2103/sophron/internal/collector"
+	"github.com/Shiva-2103/sophron/internal/cost"
+	"github.com/Shiva-2103/sophron/internal/rules"
 )
+
+// CostReader is what the cost endpoints need. cost.Reporter implements it.
+type CostReader interface {
+	Models(ctx context.Context, window time.Duration) ([]cost.ModelCost, error)
+	Nodes(ctx context.Context) ([]cost.NodeCost, error)
+	Summary(ctx context.Context, window time.Duration) (cost.Summary, error)
+	Savings(ctx context.Context, window time.Duration) ([]cost.Saving, error)
+	Trend(ctx context.Context, window time.Duration) ([]cost.TrendPoint, error)
+}
+
+// FindingsReader is the part of the store the findings API needs.
+type FindingsReader interface {
+	Findings(ctx context.Context, status string, limit int) ([]rules.Finding, error)
+}
 
 // Reader is the part of the store the API needs.
 type Reader interface {
@@ -24,6 +43,24 @@ type Server struct {
 	Status   func() collector.Status
 	Synced   func() bool
 	Interval time.Duration
+
+	// Rules engine (optional: nil when --rules=false).
+	Findings  FindingsReader
+	Rules     func() rules.Status
+	Detectors []rules.Detector
+
+	// Cost engine (optional).
+	Cost CostReader
+
+	// Dashboard, login and approvals (all optional).
+	Auth        *auth.Auth
+	ClusterName string
+	FixReader   FixReader
+	FixDecider  FixDecider
+	AuditReader AuditReader
+	AuditWriter AuditWriter
+	Setup       func(ctx context.Context) []Check
+	UI          fs.FS
 }
 
 // Handler returns the HTTP routes.
@@ -33,6 +70,12 @@ type Server struct {
 //	GET /api/v1/status                 details of the last cycle
 //	GET /api/v1/snapshots/latest       newest snapshot per pod (last 10 minutes)
 //	GET /api/v1/snapshots?namespace=&pod=&since=15m   one pod's history
+//	GET /api/v1/findings?status=open|resolved|all     problems Sophron found
+//	GET /api/v1/rules/status                          last rules engine run
+//	GET /api/v1/detectors                             what each detector looks for
+//	GET /api/v1/cost/summary?window=1h                spend, idle, cost per 1M tokens
+//	GET /api/v1/cost/models?window=1h                 cost and throughput per model
+//	GET /api/v1/cost/nodes                            each node: price, model, other, idle
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -44,7 +87,44 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /api/v1/snapshots/latest", s.latest)
 	mux.HandleFunc("GET /api/v1/snapshots", s.history)
-	return mux
+	mux.HandleFunc("GET /api/v1/findings", s.findings)
+	mux.HandleFunc("GET /api/v1/rules/status", func(w http.ResponseWriter, _ *http.Request) {
+		if s.Rules == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "rules engine is off (--rules=false)"})
+			return
+		}
+		writeJSON(w, http.StatusOK, s.Rules())
+	})
+	mux.HandleFunc("GET /api/v1/cost/summary", s.costHandler(func(r *http.Request, w time.Duration) (any, error) {
+		return s.Cost.Summary(r.Context(), w)
+	}))
+	mux.HandleFunc("GET /api/v1/cost/models", s.costHandler(func(r *http.Request, w time.Duration) (any, error) {
+		m, err := s.Cost.Models(r.Context(), w)
+		if m == nil {
+			m = []cost.ModelCost{}
+		}
+		return m, err
+	}))
+	mux.HandleFunc("GET /api/v1/cost/nodes", s.costHandler(func(r *http.Request, _ time.Duration) (any, error) {
+		n, err := s.Cost.Nodes(r.Context())
+		if n == nil {
+			n = []cost.NodeCost{}
+		}
+		return n, err
+	}))
+	mux.HandleFunc("GET /api/v1/detectors", func(w http.ResponseWriter, _ *http.Request) {
+		type d struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		out := []d{}
+		for _, x := range s.Detectors {
+			out = append(out, d{x.Name(), x.Description()})
+		}
+		writeJSON(w, http.StatusOK, out)
+	})
+	s.routes(mux)
+	return s.middleware(mux)
 }
 
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +188,67 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 		snaps = []collector.Snapshot{}
 	}
 	writeJSON(w, http.StatusOK, snaps)
+}
+
+func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
+	if s.Findings == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "rules engine is off (--rules=false)"})
+		return
+	}
+	status := r.URL.Query().Get("status")
+	switch status {
+	case "", "open":
+		status = rules.StatusOpen
+	case "all":
+		status = ""
+	case rules.StatusResolved:
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "status must be open, resolved or all"})
+		return
+	}
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 1000 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be 1 to 1000"})
+			return
+		}
+		limit = n
+	}
+	fs, err := s.Findings.Findings(r.Context(), status, limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if fs == nil {
+		fs = []rules.Finding{}
+	}
+	writeJSON(w, http.StatusOK, fs)
+}
+
+// costHandler parses ?window= (default 1h, up to 7 days) and runs fn.
+func (s *Server) costHandler(fn func(r *http.Request, window time.Duration) (any, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.Cost == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "cost engine is off (--cost=false)"})
+			return
+		}
+		window := time.Hour
+		if v := r.URL.Query().Get("window"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil || d < 5*time.Minute || d > 7*24*time.Hour {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "window must be a duration from 5m to 168h, like 1h or 24h"})
+				return
+			}
+			window = d
+		}
+		v, err := fn(r, window)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, v)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

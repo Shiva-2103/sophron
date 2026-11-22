@@ -10,6 +10,8 @@ We build Sophron one working brick at a time. Each phase:
 
 Timing assumes 8 to 10 hours a week.
 
+> Order changed on 15 Nov 2026: Phase 6 (approvals and operator) comes before Phase 5 (dashboard), so the dashboard is designed around real approvals.
+
 ## Phase 0: Repo and plan
 
 Week 1
@@ -47,9 +49,13 @@ Learn: Go project layout, `client-go` informers, RBAC, PromQL from code, Docker 
 
 Weeks 7 to 9. Detect real failures.
 
-- [ ] First 5 detectors with tests
-- [ ] A test scenario for each failure
-- [ ] Slack message with evidence and the suggested fix
+- [x] Engine: findings open, update, escalate and resolve (no flapping)
+- [x] 6 detectors with unit tests: pending, stuck rollout, OOM, crash, slow start, queue backlog
+- [x] A chaos scenario for each failure (`make chaos SCENARIO=...`)
+- [x] Findings API and `make findings`
+- [x] `make rules-check` passes in the lab (all 6 scenarios)
+- [x] Slack message with evidence and the suggested fix (`make slack-secret`, `make slack-test`)
+- [x] Resolved alerts say what changed, with which tool, and how long it was down
 
 Learn: turning runbooks into code, chaos testing, alerts that aren't noisy
 
@@ -57,8 +63,14 @@ Learn: turning runbooks into code, chaos testing, alerts that aren't noisy
 
 Weeks 10 to 12. What it costs and where it should run.
 
-- [ ] Cost per model and per 1,000 tokens
-- [ ] Node-fit suggestions, checked by hand for 3 models
+- [x] Every snapshot priced: node label, price file, OpenCost, or defaults marked as an estimate
+- [x] Cost per model per hour, per month and per 1M tokens
+- [x] Idle cost per node; model + other pods + idle = node price
+- [x] Down cost on resolved findings and in Slack
+- [x] Self-hosted vs API comparison and break-even (APIs you choose)
+- [x] `make cost-check` passes in the lab (5 of 5)
+- [x] Savings suggestions: right-size, idle model, idle node, cheaper node fit (`make savings`)
+- [ ] Savings checked by hand for 3 models in the lab
 
 Learn: Kubernetes FinOps, GPU memory math, quantization
 
@@ -66,9 +78,12 @@ Learn: Kubernetes FinOps, GPU memory math, quantization
 
 Weeks 13 to 16. Something strangers can install.
 
-- [ ] `helm install` works with no settings
-- [ ] `sophron doctor` explains anything missing
-- [ ] Dashboard: overview, cost, endpoints, problems, setup health
+- [x] Dashboard: overview, models, problems, approvals, cost, activity, setup; light and dark (`make dashboard`, `make demo`)
+- [x] Sign-in with admin and viewer roles
+- [x] Helm chart (`charts/sophron`), linted and rendered in CI
+- [x] Doctor: setup checks with the fix for each (`make doctor`, Setup page)
+- [x] Dashboard polish: model detail page (charts, pods, history, API comparison), phone layout, data freshness, confirm-to-approve, browser-tested
+- [ ] `helm install` tested on a fresh cluster (needs a published image)
 - [ ] Release v0.1.0 and share it
 - [ ] 10 people outside us have tried it
 
@@ -78,10 +93,13 @@ Learn: Helm chart design, releases, building in public
 
 Weeks 17 to 20. Fix things with a human in the loop.
 
-- [ ] `RemediationPolicy` with auto, approve and never
-- [ ] Approve or reject from Slack and the dashboard
-- [ ] Audit log page
-- [ ] A "never" action can't run, whatever happens
+- [x] Policy with auto, approve and never, per action and namespace
+- [x] Approve or deny from the dashboard (Slack links to it)
+- [x] Approve or deny inside Slack (Socket Mode, approvers list)
+- [x] Audit log page, hash-chained
+- [x] A "never" action can't run, whatever happens (tested)
+- [x] Follow-up steps when a fix isn't enough
+- [x] `make e2e-check` passes in the lab (3 approved steps: 512Mi → 768Mi → 1280Mi → 2Gi)
 
 Learn: operators, custom resources, safe automation
 

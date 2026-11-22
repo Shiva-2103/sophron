@@ -2,9 +2,11 @@ package kube
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -89,15 +91,21 @@ func TestNodeInfoFrom(t *testing.T) {
 			"node.kubernetes.io/instance-type": "g6.xlarge",
 			"topology.kubernetes.io/zone":      "us-east-1b",
 			"karpenter.sh/capacity-type":       "spot",
-		}},
+			"topology.kubernetes.io/region":    "us-east-1",
+		}, Annotations: map[string]string{HourlyPriceKey: "0.42"}},
 		Spec: corev1.NodeSpec{ProviderID: "aws:///us-east-1b/i-0abc"},
 		Status: corev1.NodeStatus{Capacity: corev1.ResourceList{
 			corev1.ResourceCPU: resource.MustParse("4"), "nvidia.com/gpu": resource.MustParse("1"),
 		}},
 	}
 	info := NodeInfoFrom(n)
-	want := NodeInfo{Name: "ip-10-0-1-5", Provider: "aws", InstanceType: "g6.xlarge", Zone: "us-east-1b", CapacityType: "spot", CPUCores: 4, GPUs: 1}
-	if info != want {
+	want := NodeInfo{Name: "ip-10-0-1-5", Provider: "aws", InstanceType: "g6.xlarge", Zone: "us-east-1b", Region: "us-east-1",
+		CapacityType: "spot", CPUCores: 4, GPUs: 1, HourlyPrice: "0.42"}
+	if info.Labels["topology.kubernetes.io/zone"] != "us-east-1b" {
+		t.Errorf("labels not kept: %v", info.Labels)
+	}
+	info.Labels = nil
+	if !reflect.DeepEqual(info, want) {
 		t.Errorf("got %+v\nwant %+v", info, want)
 	}
 }
@@ -121,7 +129,13 @@ func TestCapacityType(t *testing.T) {
 
 func TestInformersEndToEnd(t *testing.T) {
 	pod := modelPod()
-	other := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}}
+	other := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec: corev1.PodSpec{NodeName: "worker-1", Containers: []corev1.Container{{Name: "web", Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m"), corev1.ResourceMemory: resource.MustParse("1Gi")}}}}}}
+	done := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "default"},
+		Spec: corev1.PodSpec{NodeName: "worker-1", Containers: []corev1.Container{{Name: "job", Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}},
+		Status: corev1.PodStatus{Phase: corev1.PodSucceeded}}
 	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "worker-1"}, Spec: corev1.NodeSpec{ProviderID: "kind://docker/x"}}
 	warning := &corev1.Event{
 		ObjectMeta:     metav1.ObjectMeta{Name: "ev1", Namespace: "llm"},
@@ -129,7 +143,7 @@ func TestInformersEndToEnd(t *testing.T) {
 		Type:           corev1.EventTypeWarning, Reason: "FailedScheduling", Message: "0/3 nodes are available: Insufficient cpu",
 		LastTimestamp: metav1.Now(),
 	}
-	client := fake.NewClientset(pod, other, node, warning)
+	client := fake.NewClientset(pod, other, done, node, warning)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -146,6 +160,14 @@ func TestInformersEndToEnd(t *testing.T) {
 	if n, ok := inf.Node("worker-1"); !ok || n.Provider != "kind" {
 		t.Errorf("Node = %+v, %v", n, ok)
 	}
+	if ns := inf.Nodes(); len(ns) != 1 || ns[0].Name != "worker-1" {
+		t.Errorf("Nodes = %+v", ns)
+	}
+	// The model pod (4 cores, 1 GPU) and the web pod (0.5 cores, 1 GiB);
+	// the finished job no longer holds its 2 cores.
+	if r := inf.NodeRequests("worker-1"); r.Pods != 2 || r.CPUCores != 4.5 || r.MemoryBytes != 1<<30 || r.GPUs != 1 {
+		t.Errorf("NodeRequests = %+v", r)
+	}
 	// The event handler runs asynchronously after sync; give it a moment.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -159,5 +181,26 @@ func TestInformersEndToEnd(t *testing.T) {
 			t.Fatal("warning event not recorded")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestLastChange(t *testing.T) {
+	t1 := metav1.NewTime(time.Date(2026, 11, 15, 7, 0, 0, 0, time.UTC))
+	t2 := metav1.NewTime(t1.Add(10 * time.Minute))
+	t3 := metav1.NewTime(t1.Add(20 * time.Minute))
+	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "llm-server", Namespace: "llm",
+		ManagedFields: []metav1.ManagedFieldsEntry{
+			{Manager: "kubectl-client-side-apply", Operation: metav1.ManagedFieldsOperationUpdate, Time: &t1},
+			{Manager: "kubectl-patch", Operation: metav1.ManagedFieldsOperationUpdate, Time: &t2},
+			{Manager: "kube-controller-manager", Operation: metav1.ManagedFieldsOperationUpdate, Time: &t3, Subresource: "status"},
+			{Manager: "kube-controller-manager", Operation: metav1.ManagedFieldsOperationUpdate, Time: &t3},
+		}}}
+	c := Changes{Client: fake.NewClientset(dep)}
+	m, at, err := c.LastChange(context.Background(), "Deployment", "llm", "llm-server")
+	if err != nil || m != "kubectl-patch" || !at.Equal(t2.Time) {
+		t.Errorf("got %q %v %v, want kubectl-patch at %v", m, at, err, t2.Time)
+	}
+	if _, _, err := c.LastChange(context.Background(), "Job", "llm", "x"); err == nil {
+		t.Error("want an error for an unsupported kind")
 	}
 }

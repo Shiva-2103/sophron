@@ -82,3 +82,10 @@ jobs:
             -schema-location default \
             -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
             deploy/ lab/llm/ lab/loadgen/
+      - uses: azure/setup-helm@v4
+      - name: helm lint and render
+        run: |
+          helm lint charts/sophron
+          helm lint charts/sophron --set policy.namespaces='{llm,chat}' --set clusterName=prod
+          helm template t charts/sophron --set policy.namespaces='{llm}' > rendered.yaml
+          ./kubeconform -summary -strict rendered.yaml

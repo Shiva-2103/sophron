@@ -14,8 +14,13 @@ type Snapshot struct {
 	Server    string    `json:"server"` // llamacpp, vllm, or the label value
 
 	// From Kubernetes: the pod.
-	WorkloadKind          string  `json:"workloadKind,omitempty"`
-	WorkloadName          string  `json:"workloadName,omitempty"`
+	WorkloadKind string `json:"workloadKind,omitempty"`
+	WorkloadName string `json:"workloadName,omitempty"`
+	// The model server container (the one that last failed, else the first).
+	Container string `json:"container,omitempty"`
+	// Which version of the workload this pod runs (pod-template-hash or
+	// controller-revision-hash). Two revisions at once means a rollout.
+	Revision              string  `json:"revision,omitempty"`
 	Phase                 string  `json:"phase"`
 	Ready                 bool    `json:"ready"`
 	Restarts              int32   `json:"restarts"`
@@ -24,9 +29,14 @@ type Snapshot struct {
 	CPURequestCores       float64 `json:"cpuRequestCores"`
 	CPULimitCores         float64 `json:"cpuLimitCores"`
 	MemoryLimitBytes      float64 `json:"memoryLimitBytes"`
+	MemoryRequestBytes    float64 `json:"memoryRequestBytes"`
 	GPURequest            int64   `json:"gpuRequest"`
 	// Seconds from pod start to Ready. Feeds the slow-cold-start detector.
 	StartupSeconds *float64 `json:"startupSeconds,omitempty"`
+	// When the pod was created, started (scheduled, init began) and last became Ready.
+	CreatedAt time.Time `json:"createdAt,omitzero"`
+	StartedAt time.Time `json:"startedAt,omitzero"`
+	ReadyAt   time.Time `json:"readyAt,omitzero"`
 
 	// From Kubernetes: the latest warning event for this pod (last 15 minutes).
 	WarningReason  string `json:"warningReason,omitempty"`
@@ -37,6 +47,7 @@ type Snapshot struct {
 	NodeProvider     string  `json:"nodeProvider,omitempty"`
 	NodeInstanceType string  `json:"nodeInstanceType,omitempty"`
 	NodeZone         string  `json:"nodeZone,omitempty"`
+	NodeRegion       string  `json:"nodeRegion,omitempty"`
 	NodeCapacityType string  `json:"nodeCapacityType,omitempty"`
 	NodeCPUCores     float64 `json:"nodeCpuCores,omitempty"`
 	NodeMemoryBytes  float64 `json:"nodeMemoryBytes,omitempty"`
@@ -53,4 +64,11 @@ type Snapshot struct {
 	MemoryWorkingSetBytes     *float64 `json:"memoryWorkingSetBytes"`
 	GPUUtilizationRatio       *float64 `json:"gpuUtilizationRatio"`
 	GPUMemoryUsedBytes        *float64 `json:"gpuMemoryUsedBytes"`
+
+	// From the cost engine (Phase 4). Nil when the pod has no node yet.
+	// CostPerHour is this pod's share of its node, in USD.
+	CostPerHour     *float64 `json:"costPerHour"`
+	NodeCostPerHour *float64 `json:"nodeCostPerHour"`
+	// Where the node price came from: node label, price file, opencost, default.
+	PriceSource string `json:"priceSource,omitempty"`
 }
