@@ -82,6 +82,16 @@ jobs:
           sbom: true
           cache-from: type=gha
 
+      - uses: docker/setup-qemu-action@v3
+
+      - name: Each pushed platform runs and reports this version
+        run: |
+          for p in linux/amd64 linux/arm64; do
+            out=$(docker run --rm --platform "$p" "$IMAGE:${{ steps.v.outputs.version }}" --version)
+            echo "$p: $out"
+            [[ "$out" == "sophron-collector ${{ steps.v.outputs.tag }}" ]]
+          done
+
       - uses: azure/setup-helm@v4
 
       - name: Package and push the chart

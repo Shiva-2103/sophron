@@ -4,7 +4,7 @@ Prudent operations for self-hosted LLMs on Kubernetes.
 
 *Sophron* (σώφρων) is Greek for "prudent". Kubernetes is the helmsman that steers your workloads. Sophron keeps your self-hosted LLMs cheap, healthy and safe to change.
 
-> Status: **v0.1**. Tested end to end in the lab: 6 detectors, Slack alerts with Approve/Deny buttons, cost per model and per 1M tokens, savings, fixes with policy + approval + a hash-chained audit log, and a dashboard.
+> Status: **v0.1.1**. Tested end to end in the lab: 6 detectors, Slack alerts with Approve/Deny buttons, cost per model and per 1M tokens, savings, fixes with policy + approval + a hash-chained audit log, and a dashboard.
 
 ![Sophron: a problem, a fix waiting for approval, approve, the receipt](docs/assets/demo.gif)
 
@@ -14,7 +14,7 @@ You need a Kubernetes cluster with Prometheus (for example [kube-prometheus-stac
 
 ```bash
 # 1. Install (fixes allowed only in the namespaces you list)
-helm install sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.0 \
+helm install sophron oci://ghcr.io/shiva-2103/charts/sophron --version 0.1.1 \
   --namespace sophron --create-namespace \
   --set clusterName=my-cluster --set 'policy.namespaces={llm}'
 
