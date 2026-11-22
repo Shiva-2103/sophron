@@ -141,3 +141,20 @@ jobs:
           kubectl -n sophron get pods -o wide
           kubectl -n sophron describe pods
           kubectl -n sophron logs deploy/sophron --tail=200
+
+  vulnerabilities:
+    name: vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The same gate as the release: fixable HIGH or CRITICAL in a dependency
+      # fails here, on the branch, instead of at release time.
+      - name: Scan Go dependencies
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
