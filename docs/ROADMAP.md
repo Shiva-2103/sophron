@@ -82,6 +82,7 @@ Weeks 13 to 16. Something strangers can install.
 - [x] Sign-in with admin and viewer roles
 - [x] Helm chart (`charts/sophron`), linted and rendered in CI
 - [x] Doctor: setup checks with the fix for each (`make doctor`, Setup page)
+- [x] Dashboard polish: model detail page (charts, pods, history, API comparison), phone layout, data freshness, confirm-to-approve, browser-tested
 - [ ] `helm install` tested on a fresh cluster (needs a published image)
 - [ ] Release v0.1.0 and share it
 - [ ] 10 people outside us have tried it

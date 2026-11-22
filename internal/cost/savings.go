@@ -137,7 +137,11 @@ func percentile(vals []float64, p float64) float64 {
 // money; too little risks throttling and OOM kills.
 func rightSize(k workloadKey, g []collector.Snapshot, last collector.Snapshot, np NodePrice, pods int, window time.Duration) []Saving {
 	var cpu, mem []float64
+	oomKilled := false
 	for _, s := range g {
+		if s.LastTerminationReason == "OOMKilled" {
+			oomKilled = true
+		}
 		if s.CPUCores != nil {
 			cpu = append(cpu, *s.CPUCores)
 		}
@@ -152,7 +156,7 @@ func rightSize(k workloadKey, g []collector.Snapshot, last collector.Snapshot, n
 		want := math.Max(0.1, math.Ceil(p95*1.2*10)/10) // p95 + 20%, in 0.1 cores
 		ev := []string{
 			fmt.Sprintf("CPU request %s cores per pod", cores(last.CPURequestCores)),
-			fmt.Sprintf("CPU used: p95 %s cores, max %s cores over %d samples (%s)", cores(p95), cores(percentile(cpu, 1)), len(cpu), window),
+			fmt.Sprintf("CPU used: p95 %s cores, max %s cores over %d samples in the last %s", cores(p95), cores(percentile(cpu, 1)), len(cpu), span(window)),
 		}
 		switch {
 		case want < last.CPURequestCores*0.8:
@@ -174,7 +178,9 @@ func rightSize(k workloadKey, g []collector.Snapshot, last collector.Snapshot, n
 			})
 		}
 	}
-	if len(mem) >= minSamples && last.MemoryRequestBytes > 0 {
+	// A workload that was OOM-killed needs more memory, not less: its usage
+	// is capped by the limit, so the peak we saw understates what it wants.
+	if len(mem) >= minSamples && last.MemoryRequestBytes > 0 && !oomKilled {
 		top := percentile(mem, 1)
 		want := memStep(top * 1.25) // memory is not elastic: peak + 25%
 		if want < last.MemoryRequestBytes*0.8 {
@@ -186,7 +192,7 @@ func rightSize(k workloadKey, g []collector.Snapshot, last collector.Snapshot, n
 				SavingPerMonth: saving, Confidence: confidence(len(mem), window),
 				Evidence: []string{
 					fmt.Sprintf("memory request %s per pod", quantityBytes(last.MemoryRequestBytes)),
-					fmt.Sprintf("highest memory used: %s over %d samples (%s)", quantityBytes(top), len(mem), window),
+					fmt.Sprintf("highest memory used: %s over %d samples in the last %s", quantityBytes(top), len(mem), span(window)),
 				},
 				Snippet: fmt.Sprintf("kubectl -n %s set resources %s/%s -c %s --requests=memory=%s", k.ns, lower(k.kind), k.name, last.Container, quantityBytes(want)),
 			})
@@ -272,9 +278,9 @@ func nodeFit(k workloadKey, last collector.Snapshot, cur NodePrice, nodes []kube
 		Detail:         "A cheaper node type already in your cluster has room for this model. Pin it there with a node selector, and let the autoscaler remove the bigger node. Check the speed in a test first: fewer cores can mean fewer tokens per second.",
 		SavingPerMonth: monthly, Confidence: "medium",
 		Evidence: []string{
-			fmt.Sprintf("needs %s cores, %s memory, %d GPUs", cores(needCPU), quantityBytes(needMem), last.GPURequest),
+			fmt.Sprintf("needs %s cores, %s memory%s", cores(needCPU), quantityBytes(needMem), gpus(last.GPURequest)),
 			fmt.Sprintf("now on %s at $%.4f/hour", curNode.InstanceType, cur.Hourly),
-			fmt.Sprintf("%s has %s cores, %s, %d GPUs at $%.4f/hour", best.InstanceType, cores(best.CPUCores), quantityBytes(best.MemoryBytes), best.GPUs, bestPrice),
+			fmt.Sprintf("%s has %s cores, %s%s at $%.4f/hour", best.InstanceType, cores(best.CPUCores), quantityBytes(best.MemoryBytes), gpus(best.GPUs), bestPrice),
 		},
 		Snippet: fmt.Sprintf("spec:\n  template:\n    spec:\n      nodeSelector:\n        node.kubernetes.io/instance-type: %s", best.InstanceType),
 	}, true
@@ -322,4 +328,28 @@ func lower(s string) string {
 		}
 	}
 	return string(b)
+}
+
+// span says a window the way people do: "7 days", "24 hours", "90 minutes".
+func span(d time.Duration) string {
+	switch {
+	case d >= 48*time.Hour && d%(24*time.Hour) == 0:
+		return fmt.Sprintf("%d days", int(d/(24*time.Hour)))
+	case d >= 2*time.Hour && d%time.Hour == 0:
+		return fmt.Sprintf("%d hours", int(d/time.Hour))
+	default:
+		return fmt.Sprintf("%d minutes", int(d.Round(time.Minute)/time.Minute))
+	}
+}
+
+// gpus is ", 1 GPU" or ", 2 GPUs", or nothing without GPUs.
+func gpus(n int64) string {
+	switch n {
+	case 0:
+		return ""
+	case 1:
+		return ", 1 GPU"
+	default:
+		return fmt.Sprintf(", %d GPUs", n)
+	}
 }

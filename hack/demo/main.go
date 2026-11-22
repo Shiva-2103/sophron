@@ -119,6 +119,7 @@ func main() {
 			}
 			if m.name == "llm-server" {
 				s.MemoryLimitBytes, s.LastTerminationReason = 512<<20, "OOMKilled"
+				s.MemoryWorkingSetBytes = f(float64(380<<20) + 120*float64(1<<20)*load) // hits the 512Mi limit at busy times
 				if !ready {
 					s.WaitingReason, s.Restarts = "CrashLoopBackOff", 4
 				}

@@ -100,6 +100,24 @@ Confidence is **high** with 7 days and 1,000+ samples, **medium** with a day, **
 
 ---
 
+## ***Dashboard audit (22 Nov)***
+
+A pass over every page, in light and dark, at desktop and phone width, with a browser driving it.
+
+| Area | Before | After |
+|---|---|---|
+| Phone | The sidebar was hidden and nothing replaced it: no way to change page | A scrollable nav bar under the header; tables scroll sideways; KPIs two per row |
+| Models | Clicking a model opened Problems | Each model has its own page: KPIs, token/memory/CPU charts, pods, history, API comparison, its savings |
+| Charts | The first and current hour looked like a drop in spend (they're only partly covered); no axis labels | Spend and tokens are shown per hour of coverage; time axis, top value, legend and hover values |
+| Freshness | "Updated 10:31" even if the collector had stopped | "Live" or "Data from 4 min ago"; a banner when no data for 3 min |
+| Approve | One click changed the cluster | First click arms the button, the second applies it (like Slack's confirm); a typed reason survives the 15 s refresh |
+| Tabs | Problems → Resolved and the Activity filters didn't switch | Fixed: the "don't redraw while typing" guard now only applies to text fields |
+| Robustness | A finding without a fix, a fix without an action, or a node priced at $0 could break a page; cost off showed "Can't reach the API" | Guarded; cost off says so and how to turn it on |
+| Content | — | Overview: spend split (models, other, idle), "Could save" total, recent activity. Problems sorted by severity, with the waiting fix. Approvals: why a fix was superseded or obsolete. Copy buttons on snippets. Tab title shows open problems |
+| Savings | Suggested lowering memory on a model that was being OOM-killed; "1 GPUs"; "(168h0m0s)" | No memory cut after an OOM kill (usage is capped by the limit, so the peak understates the need); "1 GPU"; "in the last 7 days" |
+
+---
+
 ## ***Commands***
 
 | Command | Does |
@@ -140,6 +158,8 @@ Confidence is **high** with 7 days and 1,000+ samples, **medium** with a day, **
 > | Anyone in the Slack channel could press Approve | Only Slack member IDs on the approvers list can; others get a private refusal |
 > | Slack said "not configured to handle interactive responses" | Creating the app token isn't enough: Socket Mode and Interactivity must both be switched on in the app settings |
 > | `kubectl port-forward` died every time the collector restarted, so the dashboard went away | `make dashboard` runs it in a restart loop, on 0.0.0.0:8081 |
+> | Clicking a tab on Problems or Activity did nothing | Rendering skipped the page while anything in it had focus, including the tab just clicked; now only text fields block a redraw |
+> | Savings suggested less memory for a workload being OOM-killed | Memory cuts are skipped when any snapshot in the window ended in OOMKilled |
 > | Couldn't download Helm in the build sandbox | CI lints and renders the chart, then validates it with kubeconform |
 {.is-danger}
 
