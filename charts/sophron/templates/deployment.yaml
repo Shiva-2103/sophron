@@ -32,6 +32,12 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "sophron.fullname" . }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -55,6 +61,15 @@ spec:
             - { name: SOPHRON_SLACK_WEBHOOK_FILE, value: /etc/sophron/slack/webhook-url }
             - { name: SOPHRON_SLACK_MIN_SEVERITY, value: {{ .Values.slack.minSeverity | quote }} }
             - { name: SOPHRON_DASHBOARD_URL, value: {{ .Values.dashboardURL | quote }} }
+            {{- with .Values.slack.approvers }}
+            - { name: SOPHRON_SLACK_APPROVERS, value: {{ join "," . | quote }} }
+            {{- end }}
+            {{- if .Values.auth.insecureHTTPCookies }}
+            - { name: SOPHRON_INSECURE_HTTP_COOKIES, value: "true" }
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8080

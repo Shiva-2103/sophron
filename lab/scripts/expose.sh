@@ -31,7 +31,7 @@ metadata:
 spec:
   type: NodePort
   selector:
-    app.kubernetes.io/name: sophron-collector
+$(kubectl -n sophron-system get svc sophron-collector -o go-template='{{range $k, $v := .spec.selector}}    {{$k}}: {{$v}}{{"\n"}}{{end}}')
   ports:
     - name: http
       port: 8080

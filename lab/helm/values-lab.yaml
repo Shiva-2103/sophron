@@ -1,0 +1,34 @@
+# The lab's settings for the published chart: make helm-swap uses this.
+# Same behaviour as deploy/collector/collector.yaml.
+clusterName: sophron-lab
+timezone: Asia/Kolkata
+
+prometheus:
+  url: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
+
+# Reuse the lab's logins and Slack secret, so nothing changes for you.
+auth:
+  existingSecret: sophron-admin
+  insecureHTTPCookies: true   # the lab serves the dashboard on plain http :8081
+slack:
+  existingSecret: sophron-slack
+
+pricing:
+  nodes:
+    - name: "sophron-lab-*"
+      hourly: 0.1109
+      note: EC2 t3.2xlarge ($0.3328/h) shared by 3 kind nodes
+  referenceAPIs:
+    - name: Example API (edit these prices)
+      inputPer1M: 0.50
+      outputPer1M: 1.50
+
+policy:
+  default: approve
+  namespaces: [llm]
+  maxReplicas: 2
+  actions:
+    rollout-restart: approve
+    rollout-undo: approve
+    set-memory-limit: approve
+    scale-up: approve

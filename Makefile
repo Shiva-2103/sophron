@@ -10,7 +10,7 @@ MON_NS       := monitoring
 MON_RELEASE  := monitoring
 IMAGE        ?= sophron-collector:dev
 
-.PHONY: help slack-buttons slack-approvers admin-password dashboard dashboard-private dashboard-allow-me dashboard-revoke-me dashboard-stop dashboard-3000 dashboard-3000-off dashboard-tunnel demo doctor fixes e2e-check savings cost cost-models cost-nodes cost-check slack-secret slack-test slack-off build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
+.PHONY: help helm-swap helm-status helm-back slack-buttons slack-approvers admin-password dashboard dashboard-private dashboard-allow-me dashboard-revoke-me dashboard-stop dashboard-3000 dashboard-3000-off dashboard-tunnel demo doctor fixes e2e-check savings cost cost-models cost-nodes cost-check slack-secret slack-test slack-off build test lint findings findings-all detectors chaos-list chaos chaos-reset rules-check collector-image collector-deploy collector-up collector-logs collector-status collector-snapshots collector-check lab-tools lab-up lab-down lab-status lab-load lab-check lab-load-summary lab-bench lab-ports lab-ports-stop lab-grafana lab-grafana-allow-me lab-grafana-revoke-me lab-grafana-password
 
 help: ## List available commands
 	@awk 'BEGIN{FS=":.*?## "} /^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} /^[a-zA-Z0-9_-]+:.*?## /{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -33,6 +33,8 @@ collector-image: ## Build the collector image and load it into the kind cluster
 	kind load docker-image $(IMAGE) --name $(CLUSTER)
 
 collector-deploy: ## Deploy or redeploy the collector
+	@if helm -n sophron-system status sophron-collector >/dev/null 2>&1; then \
+	  echo "Sophron is installed from the published chart (make helm-swap). Run make helm-back first."; exit 1; fi
 	kubectl apply -f deploy/collector/collector.yaml
 	kubectl -n sophron-system rollout restart deploy/sophron-collector
 	kubectl -n sophron-system rollout status deploy/sophron-collector --timeout=3m
@@ -89,6 +91,16 @@ cost-check: ## Phase 4 check: send load, verify prices and cost per token (~3 mi
 
 savings: ## Savings suggestions from the last 7 days
 	@bash $(LAB_DIR)/scripts/api.sh /api/v1/savings
+
+##@ Published release (Helm chart from ghcr.io)
+helm-swap: ## Replace the locally built Sophron with the published release (VERSION=0.1.2; PUBLIC=1 once packages are public)
+	@bash $(LAB_DIR)/scripts/helm.sh swap
+
+helm-status: ## Show the installed release, image and version
+	@bash $(LAB_DIR)/scripts/helm.sh status
+
+helm-back: ## Remove the Helm release; then make collector-up for the local build
+	@bash $(LAB_DIR)/scripts/helm.sh back
 
 ##@ Dashboard and fixes (Phase 5/6)
 admin-password: ## Create the dashboard admin and viewer passwords (once) and print them
