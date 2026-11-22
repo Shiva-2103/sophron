@@ -5,6 +5,7 @@ image:
   repository: ghcr.io/shiva-2103/sophron-collector
   tag: ""                 # default: the chart's appVersion
   pullPolicy: IfNotPresent
+  pullSecrets: []         # e.g. [ghcr-pull] while the image is private
 
 clusterName: kubernetes   # shown in alerts and the dashboard
 timezone: UTC             # e.g. Asia/Kolkata; UTC is always shown too
@@ -29,13 +30,17 @@ resources:
 auth:
   existingSecret: ""
   generate: true          # false + no secret = read-only dashboard, no approvals
+  insecureHTTPCookies: false  # lab only: allow sign-in over plain http on a public address
 
 dashboardURL: ""          # e.g. https://sophron.example.com, for links in Slack
 
-# Slack: a Secret with key webhook-url (kubectl create secret generic sophron-slack --from-file=webhook-url=/dev/stdin)
+# Slack: a Secret with key webhook-url (kubectl create secret generic sophron-slack --from-file=webhook-url=/dev/stdin).
+# Approve/Deny buttons: add key app-token (an xapp- token, Socket Mode) to the
+# same Secret, and list the Slack member IDs allowed to press them.
 slack:
   existingSecret: ""
   minSeverity: warning
+  approvers: []           # e.g. [U0123ABCD]
 
 # Prices. Nodes are priced by, in order: a sophron.dev/hourly-price node
 # label, these rules, OpenCost if installed, then default prices (marked as
@@ -62,3 +67,5 @@ policy:
 service:
   type: ClusterIP
   port: 8080
+
+extraEnv: []              # more environment variables for the container

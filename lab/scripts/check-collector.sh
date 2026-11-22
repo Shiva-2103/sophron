@@ -18,7 +18,7 @@ for _ in $(seq 1 20); do curl -fs "http://127.0.0.1:$port/healthz" >/dev/null 2>
 echo "Phase 2 checks"
 
 # 1. Collector pod is Ready (readiness = informers synced + a recent good cycle)
-if kubectl -n sophron-system wait --for=condition=Ready pod -l app.kubernetes.io/name=sophron-collector --timeout=5s >/dev/null 2>&1; then
+if kubectl -n sophron-system wait --for=condition=Ready pod -l 'app.kubernetes.io/name in (sophron-collector,sophron)' --timeout=5s >/dev/null 2>&1; then
   ok "collector pod Ready"
 else
   bad "collector pod not Ready (see: make collector-logs)"

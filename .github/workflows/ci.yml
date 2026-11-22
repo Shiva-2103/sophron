@@ -105,6 +105,15 @@ jobs:
           helm lint charts/sophron --set policy.namespaces='{llm,chat}' --set clusterName=prod
           helm template t charts/sophron --set policy.namespaces='{llm}' > rendered.yaml
           ./kubeconform -summary -strict rendered.yaml
+          # The lab's values, with the private-image and Slack settings.
+          helm template sophron-collector charts/sophron -n sophron-system -f lab/helm/values-lab.yaml \
+            --set 'image.pullSecrets={ghcr-pull}' --set 'slack.approvers={U1,U2}' > lab.yaml
+          ./kubeconform -summary -strict lab.yaml
+          grep -q 'name: ghcr-pull' lab.yaml
+          grep -q 'value: "U1,U2"' lab.yaml
+          grep -q 'SOPHRON_INSECURE_HTTP_COOKIES' lab.yaml
+          grep -q 'secretName: sophron-admin' lab.yaml
+          grep -q 'name: sophron-collector$' lab.yaml
 
   install:
     name: install on a fresh cluster
